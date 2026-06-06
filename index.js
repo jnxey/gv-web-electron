@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, ipcMain, globalShortcut, Menu } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, globalShortcut, Menu, session } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
 const os = require('os');
@@ -156,7 +156,7 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      webSecurity: false
+      webSecurity: true
     }
   });
 
@@ -167,7 +167,7 @@ const createWindow = () => {
   }
 
   // 打开开发工具
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 
   // 注册 F12 快捷键
   globalShortcut.register('CommandOrControl+Shift+I', () => {
@@ -189,6 +189,16 @@ const createWindow = () => {
   initIPC(mainWindow);
 };
 
+// 禁用 Private Network Access 限制（公网 SPA 访问本地 127.0.0.1:9999）
+app.commandLine.appendSwitch(
+  'disable-features',
+  [
+    'BlockInsecurePrivateNetworkRequests',
+    'PrivateNetworkAccessSendPreflights',
+    'PrivateNetworkAccessRespectPreflightResults'
+  ].join(',')
+);
+
 // 忽略 HTTPS 证书安全警告
 app.commandLine.appendSwitch('ignore-certificate-errors', 'true');
 
@@ -203,6 +213,18 @@ app.on('certificate-error', (event, webContents, url, error, certificate, callba
 
 const nodeProcess = {};
 
+function setupLocalServiceCorsHeaders() {
+  session.defaultSession.webRequest.onHeadersReceived(
+    { urls: ['https://127.0.0.1:9999/*', 'https://localhost:9999/*'] },
+    (details, callback) => {
+      const headers = { ...details.responseHeaders };
+      headers['Access-Control-Allow-Origin'] = ['*'];
+      headers['Access-Control-Allow-Private-Network'] = ['true'];
+      callback({ responseHeaders: headers });
+    }
+  );
+}
+
 const gotTheLock = app.requestSingleInstanceLock(); // 必须在app.whenReady()前调用
 if (!gotTheLock) {
   app.quit(); // 退出第二个实例
@@ -216,6 +238,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    setupLocalServiceCorsHeaders();
     createWindow();
 
     app.on('activate', () => {
