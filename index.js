@@ -166,6 +166,9 @@ const createWindow = () => {
     mainWindow.loadFile('./index.html');
   }
 
+  // 打开开发工具
+  // mainWindow.webContents.openDevTools();
+
   // 注册 F12 快捷键
   globalShortcut.register('CommandOrControl+Shift+I', () => {
     if (mainWindow) {
@@ -222,7 +225,7 @@ if (!gotTheLock) {
     });
 
     // 启动 Node 服务
-    nodeProcess.serial = fork(path.join(__dirname, 'serial-server.js'), { windowsHide: true });
+    nodeProcess.serial = fork(path.join(__dirname, 'hk.http.js'), { windowsHide: true });
     nodeProcess.socket = fork(path.join(__dirname, 'socket-server.js'), { windowsHide: true });
   });
 }
