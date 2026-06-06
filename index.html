@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self' data: blob:; connect-src 'self' *; img-src * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+    <title>初始化服务地址</title>
+</head>
+<body>
+<script>
+  // 显示Loading
+  function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+  }
+
+  // 隐藏Loading
+  function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+  }
+
+  function handlerConfirm() {
+    var protocol = document.getElementById('protocol').value;
+    var domain = document.getElementById('domain').value;
+    if (!domain) return;
+    showLoading();
+    var url = protocol + domain + '/adminapi/config/getConfig'
+    fetch(url, { method: 'GET' }).then(function () {
+      var result = confirm("确认设置此服务地址？请注意，设置成功后不可修改");
+      if (result) {
+        window.electron.setLocalConfig({root_url: protocol + domain});
+        alert('设置成功，重启后生效');
+        window.electron.appQuit();
+      }
+    }).catch(function (err) {
+      return alert('该地址无法访问');
+    }).finally(function () {
+      hideLoading();
+    });
+  }
+</script>
+<!-- 加载层容器 -->
+<div id="loading" class="loading-overlay">
+    <div class="spinner"></div>
+</div>
+<div role="form" class="domain-form" id="domainForm">
+    <h1>初始化服务地址</h1>
+
+    <!-- 协议选择+域名输入组合 -->
+    <div class="input-group">
+        <div class="protocol-select">
+            <select id="protocol" name="protocol">
+                <option value="http://">http://</option>
+                <option value="https://">https://</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <input type="text" id="domain" name="domain" placeholder="输入IP或域名，尾部不带斜杠" required>
+        </div>
+    </div>
+    <button type="submit" onclick="handlerConfirm()">确认服务地址</button>
+</div>
+<style type="text/css">
+    /* 基础样式（参考网页1、5） */
+    body {
+        font-family: 'Helvetica Neue', sans-serif;
+        background: #f8f9fa;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+    }
+
+    .domain-form {
+        background: white;
+        padding: 2.5rem;
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        width: 90%;
+        max-width: 600px;
+    }
+
+    /* 组合输入框（参考网页4布局） */
+    .input-group {
+        display: flex;
+        gap: 10px;
+        margin: 1.5rem 0;
+    }
+
+    .protocol-select select {
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .form-group {
+        flex-grow: 1;
+        position: relative;
+    }
+
+    /* 输入框验证反馈（增强网页6、7方案） */
+    input[type="text"] {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        transition: border-color 0.3s;
+    }
+
+    input:focus {
+        outline: none;
+        border-color: #4dabf7;
+        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.2);
+    }
+
+    input:invalid:not(:placeholder-shown) {
+        border-color: #ff6b6b;
+        animation: shake 0.5s;
+    }
+
+    .error-msg {
+        color: #ff6b6b;
+        font-size: 0.875rem;
+        position: absolute;
+        bottom: -22px;
+        left: 0;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    input:invalid:not(:placeholder-shown) + .error-msg {
+        opacity: 1;
+    }
+
+    /* 按钮交互（参考网页1优化） */
+    button[type="submit"] {
+        background: linear-gradient(135deg, #4dabf7, #339af0);
+        color: white;
+        padding: 14px 32px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: transform 0.2s;
+    }
+
+    button[type="submit"]:hover {
+        transform: translateY(-2px);
+    }
+
+    @keyframes shake {
+        0%, 100% {
+            transform: translateX(0);
+        }
+        25% {
+            transform: translateX(5px);
+        }
+        75% {
+            transform: translateX(-5px);
+        }
+    }
+</style>
+<style type="text/css">
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.9);
+        z-index: 9999;
+        display: none; /* 默认隐藏 */
+    }
+
+    .spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        margin: -20px -20px;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+</body>
+</html>

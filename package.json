@@ -1,0 +1,81 @@
+{
+  "name": "game-xch",
+  "version": "1.0.0",
+  "authors": "JackLee",
+  "description": "A APP",
+  "main": "index.js",
+  "scripts": {
+    "start": "electron ./index.js",
+    "build": "electron-builder --win --x64"
+  },
+  "author": "",
+  "license": "ISC",
+  "build": {
+    "asar": false,
+    "appId": "com.game.xch",
+    "win": {
+      "target": "nsis",
+      "icon": "resources/app/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "extraResources": [
+      {
+        "from": "resources/app",
+        "to": "app"
+      },
+      {
+        "from": "serial-server.js",
+        "to": "app"
+      },
+      {
+        "from": "socket-server.js",
+        "to": "app"
+      },
+      {
+        "from": "node_modules/node-gyp-build/",
+        "to": "app/node_modules/node-gyp-build/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules/debug/",
+        "to": "app/node_modules/debug/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules/ms/",
+        "to": "app/node_modules/ms/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules/serialport/",
+        "to": "app/node_modules/serialport/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules/@serialport/",
+        "to": "app/node_modules/@serialport/",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "node_modules/ws/",
+        "to": "app/node_modules/ws/",
+        "filter": ["**/*"]
+      }
+    ]
+  },
+  "devDependencies": {
+    "@electron/fuses": "^1.8.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^26.0.12",
+    "prettier": "^3.4.2",
+    "axios": "^1.13.2",
+    "serialport": "^13.0.0",
+    "ws": "^8.18.3"
+  },
+  "dependencies": {
+
+  }
+}

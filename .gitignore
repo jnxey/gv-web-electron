@@ -1,0 +1,17 @@
+.idea
+.vscode
+lib
+dist
+types
+node_modules
+package-lock.json
+yarn.lock
+server
+web
+stats.html
+/assets/resource-space/space-*
+
+out/
+
+resources/app/vendor
+resources/app/apk
