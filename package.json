@@ -37,32 +37,51 @@
       {
         "from": "node_modules/node-gyp-build/",
         "to": "app/node_modules/node-gyp-build/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "node_modules/debug/",
         "to": "app/node_modules/debug/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "node_modules/ms/",
         "to": "app/node_modules/ms/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "node_modules/serialport/",
         "to": "app/node_modules/serialport/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "node_modules/@serialport/",
         "to": "app/node_modules/@serialport/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "node_modules/ws/",
         "to": "app/node_modules/ws/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "certs/",
+        "to": "app/certs/",
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },
@@ -75,6 +94,5 @@
     "serialport": "^13.0.0",
     "ws": "^8.18.3"
   },
-  "dependencies": {
-  }
+  "dependencies": {}
 }
