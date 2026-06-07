@@ -214,6 +214,53 @@ app.on('certificate-error', (event, webContents, url, error, certificate, callba
 
 const nodeProcess = {};
 
+// session cookie 无 Expires/Max-Age，Electron 关闭后会被清除，需转为持久 cookie
+const SESSION_COOKIE_TTL_SECONDS = 14 * 24 * 60 * 60;
+
+function getCookieUrl(cookie) {
+  const host = cookie.domain?.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+  return `${cookie.secure ? 'https' : 'http'}://${host}${cookie.path || '/'}`;
+}
+
+function getRootHost() {
+  try {
+    return new URL(config.root_url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isRootUrlCookie(cookie) {
+  const rootHost = getRootHost();
+  if (!rootHost || !cookie.domain) return true;
+  const domain = cookie.domain.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+  return domain === rootHost || domain.endsWith('.' + rootHost);
+}
+
+function setupSessionCookiePersistence() {
+  const cookies = session.defaultSession.cookies;
+
+  cookies.on('changed', async (event, cookie, cause, removed) => {
+    if (removed || !cookie.session || !isRootUrlCookie(cookie)) return;
+
+    try {
+      await cookies.set({
+        url: getCookieUrl(cookie),
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        sameSite: cookie.sameSite,
+        expirationDate: Math.floor(Date.now() / 1000) + SESSION_COOKIE_TTL_SECONDS
+      });
+    } catch (err) {
+      console.error('Failed to persist session cookie:', cookie.name, err);
+    }
+  });
+}
+
 function setupLocalServiceCorsHeaders() {
   session.defaultSession.webRequest.onHeadersReceived(
     { urls: ['https://127.0.0.1:9999/*', 'https://localhost:9999/*'] },
@@ -239,6 +286,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    setupSessionCookiePersistence();
     setupLocalServiceCorsHeaders();
     createWindow();
 
@@ -261,11 +309,21 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// 退出时关闭 Node 服务
-app.on('will-quit', () => {
-  if (nodeProcess.serial) nodeProcess.serial.kill();
-  if (nodeProcess.socket) nodeProcess.socket.kill();
-  globalShortcut.unregisterAll();
+// 退出时强制将 cookie 写入磁盘并关闭 Node 服务
+let isFlushingCookies = false;
+app.on('before-quit', (event) => {
+  if (isFlushingCookies) return;
+  event.preventDefault();
+  isFlushingCookies = true;
+  session.defaultSession.cookies
+    .flushStore()
+    .catch((err) => console.error('Failed to flush cookies on quit:', err))
+    .finally(() => {
+      if (nodeProcess.serial) nodeProcess.serial.kill();
+      if (nodeProcess.socket) nodeProcess.socket.kill();
+      globalShortcut.unregisterAll();
+      app.exit(0);
+    });
 });
 
 // 在当前文件中你可以引入所有的主进程代码
