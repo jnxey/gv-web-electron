@@ -156,7 +156,8 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      webSecurity: true
+      // 远程 SPA 使用自签 HTTPS，webSecurity:true 会导致 cookie 重启后丢失
+      webSecurity: false
     }
   });
 
