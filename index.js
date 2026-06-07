@@ -168,7 +168,7 @@ const createWindow = () => {
   }
 
   // 打开开发工具
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 
   // 注册 F12 快捷键
   globalShortcut.register('CommandOrControl+Shift+I', () => {
