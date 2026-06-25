@@ -77,6 +77,13 @@
         ]
       },
       {
+        "from": "ffmpeg.exe",
+        "to": "app/ffmpeg.exe",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "certs/",
         "to": "app/certs/",
         "filter": [
