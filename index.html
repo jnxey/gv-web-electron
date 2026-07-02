@@ -25,9 +25,9 @@
     var domain = document.getElementById('domain').value;
     if (!domain) return;
     showLoading();
-    var result = confirm('确认设置此服务地址？请注意，设置成功后不可修改');
+    var result = confirm('确认设置此IP地址？请注意，设置成功后不可修改');
     if (result) {
-      window.electron.setLocalConfig({ root_url: domain });
+      window.electron.setLocalConfig({ root_url: 'https://' + domain + '/gv-public/web/#/' });
       alert('设置成功，重启后生效');
       window.electron.appQuit();
     }
