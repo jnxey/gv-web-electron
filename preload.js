@@ -47,5 +47,9 @@ contextBridge.exposeInMainWorld('electron', {
   // 设置全屏与否
   setFullscreen: async (options) => {
     return ipcRenderer.invoke('set-fullscreen', options);
+  },
+  // 离线页重试：再次加载 config.root_url
+  retryRootUrl: () => {
+    return ipcRenderer.invoke('retry-root-url');
   }
 });

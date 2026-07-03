@@ -117,6 +117,11 @@ function initIPC(mainWindow) {
     return [...list];
   });
 
+  // 离线页点击「重新连接」时，再次尝试加载 config.root_url
+  ipcMain.handle('retry-root-url', () => {
+    loadRootUrl(mainWindow);
+  });
+
   // 打印html
   ipcMain.handle('print-html', (event, options) => {
     // 创建隐藏窗口
@@ -142,12 +147,37 @@ function initIPC(mainWindow) {
 let mainWindow;
 const config = tools.getConfig();
 
+// root_url 加载失败时展示离线提示页（见 offline.html）
+const ERR_ABORTED = -3; // 导航被中断（如重试时切换页面），不应视为连接失败
+
+// 加载远程 SPA
+function loadRootUrl(win) {
+  if (config.root_url) win.loadURL(config.root_url);
+}
+
+// 加载本地离线提示页
+function showOfflinePage(win) {
+  win.loadFile(path.join(__dirname, 'offline.html'));
+}
+
+// 监听 root_url 主框架加载失败，跳转离线页
+function setupRootUrlLoadFailureHandler(win) {
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return; // 忽略子资源（图片、脚本等）失败
+    if (errorCode === ERR_ABORTED) return; // 忽略主动取消的导航
+    if (!config.root_url) return;
+    if (validatedURL.includes('offline.html')) return;
+    showOfflinePage(win);
+  });
+}
+
 const createWindow = () => {
   const primaryDisplay = screen.getPrimaryDisplay(); // 获取主显示器
   const width = Math.min(1920, primaryDisplay.size.width);
   const height = Math.min(1080, primaryDisplay.size.height);
 
-  const mainWindow = new BrowserWindow({
+  // 赋值给模块级变量，供 second-instance 聚焦及 IPC 重试使用
+  mainWindow = new BrowserWindow({
     width: width,
     height: height,
     autoHideMenuBar: true,
@@ -162,7 +192,8 @@ const createWindow = () => {
   });
 
   if (!!config.root_url) {
-    mainWindow.loadURL(config.root_url);
+    setupRootUrlLoadFailureHandler(mainWindow); // 连接失败时显示离线页
+    loadRootUrl(mainWindow);
   } else {
     mainWindow.loadFile('./index.html');
   }
