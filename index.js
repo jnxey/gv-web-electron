@@ -150,9 +150,21 @@ const config = tools.getConfig();
 // root_url 加载失败时展示离线提示页（见 offline.html）
 const ERR_ABORTED = -3; // 导航被中断（如重试时切换页面），不应视为连接失败
 
-// 加载远程 SPA
-function loadRootUrl(win) {
-  if (config.root_url) win.loadURL(config.root_url);
+// 加载远程 SPA；showLoading 为 true 时先展示 loading.html（仅首次启动使用）
+function loadRootUrl(win, { showLoading = false } = {}) {
+  if (!config.root_url) return;
+
+  if (showLoading) {
+    win.loadFile(path.join(__dirname, 'loading.html'));
+    win.webContents.once('did-finish-load', () => {
+      if (win.webContents.getURL().includes('loading.html')) {
+        win.loadURL(config.root_url);
+      }
+    });
+    return;
+  }
+
+  win.loadURL(config.root_url);
 }
 
 // 加载本地离线提示页
@@ -167,6 +179,7 @@ function setupRootUrlLoadFailureHandler(win) {
     if (errorCode === ERR_ABORTED) return; // 忽略主动取消的导航
     if (!config.root_url) return;
     if (validatedURL.includes('offline.html')) return;
+    if (validatedURL.includes('loading.html')) return;
     showOfflinePage(win);
   });
 }
@@ -193,7 +206,7 @@ const createWindow = () => {
 
   if (!!config.root_url) {
     setupRootUrlLoadFailureHandler(mainWindow); // 连接失败时显示离线页
-    loadRootUrl(mainWindow);
+    loadRootUrl(mainWindow, { showLoading: true }); // 首次启动先展示 loading 页
   } else {
     mainWindow.loadFile('./index.html');
   }
