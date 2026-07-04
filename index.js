@@ -34,6 +34,82 @@ const tools = {
   }
 };
 
+/**************************************print*************************************************/
+// 打印 HTML 文档标题
+const PRINT_HTML_DOCUMENT_TITLE = '打印';
+// 打印临时 HTML 文件名前缀
+const PRINT_TEMP_HTML_FILE_PREFIX = 'gv-print-html-';
+// 打印默认份数
+const PRINT_DEFAULT_COPIES = 1;
+// 静默打印用隐藏窗口宽度（逻辑像素）
+const PRINT_HIDDEN_WINDOW_WIDTH = 1;
+// 静默打印用隐藏窗口高度（逻辑像素）
+const PRINT_HIDDEN_WINDOW_HEIGHT = 1;
+
+/**
+ * 创建用于静默打印的隐藏 BrowserWindow（不可见、不出现在任务栏）
+ * @returns {import('electron').BrowserWindow}
+ */
+function createHiddenPrintWindow() {
+  return new BrowserWindow({
+    show: false,
+    skipTaskbar: true,
+    width: PRINT_HIDDEN_WINDOW_WIDTH,
+    height: PRINT_HIDDEN_WINDOW_HEIGHT
+  });
+}
+
+/**
+ * 生成打印用的完整 HTML 文档字符串
+ * @param {string} contentHtml - 渲染进程传入的表格片段（含内联 style）
+ * @returns {string}
+ */
+function buildPrintHtmlDocument(contentHtml) {
+  return (
+    '<!DOCTYPE html>' +
+    '<html><head><meta charset="utf-8"><title>' +
+    PRINT_HTML_DOCUMENT_TITLE +
+    '</title>' +
+    '<style>html,body{margin:0;padding:0;-webkit-print-color-adjust: exact;print-color-adjust: exact;}</style>' +
+    '</head><body>' +
+    (contentHtml ?? '') +
+    '</body></html>'
+  );
+}
+
+/**
+ * 将前端 config 转为 webContents.print 合法参数（过滤 showHeaderFooter 等非 print 字段）
+ * @param {Record<string, unknown>} config
+ * @returns {Record<string, unknown>}
+ */
+function buildPrintOptionsFromConfig(config) {
+  const printOptions = {
+    silent: true,
+    printBackground: true,
+    deviceName: config?.deviceName || '',
+    copies: config?.copies || PRINT_DEFAULT_COPIES
+  };
+  if (config?.pageSize) {
+    printOptions.pageSize = config.pageSize;
+  }
+  if (config?.showHeaderFooter === false) {
+    printOptions.header = '';
+    printOptions.footer = '';
+  }
+  return printOptions;
+}
+
+/**
+ * 删除打印临时文件
+ * @param {string} filePath
+ */
+function removePrintTempFile(filePath) {
+  if (!filePath) return;
+  fs.unlink(filePath, (err) => {
+    if (err) console.error('删除打印临时文件失败:', filePath, err);
+  });
+}
+
 /**************************************ipc*************************************************/
 function initIPC(mainWindow) {
   // 处理获取MAC地址的请求
@@ -110,8 +186,7 @@ function initIPC(mainWindow) {
 
   // 获取打印机信息
   ipcMain.handle('get-printers', async () => {
-    // 创建隐藏窗口
-    const printWindow = new BrowserWindow({ show: false });
+    const printWindow = createHiddenPrintWindow();
     const list = await printWindow.webContents.getPrintersAsync();
     printWindow.close();
     return [...list];
@@ -122,24 +197,28 @@ function initIPC(mainWindow) {
     loadRootUrl(mainWindow);
   });
 
-  // 打印html
-  ipcMain.handle('print-html', (event, options) => {
-    // 创建隐藏窗口
-    const printWindow = new BrowserWindow({ show: false });
+  // 打印html：隐藏窗口加载 HTML 后 silent 静默直打（与前端 table-print-dialog 的 config 配套）
+  ipcMain.handle('print-html', async (event, options) => {
+    const htmlTempPath = path.join(os.tmpdir(), PRINT_TEMP_HTML_FILE_PREFIX + Date.now() + '.html');
+    const printWindow = createHiddenPrintWindow();
 
-    // 加载 HTML 字符串（需编码）
-    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURI(options.content)}`);
-
-    printWindow.webContents.openDevTools();
-
-    // 监听页面加载完成
-    printWindow.webContents.on('did-finish-load', () => {
-      // 触发打印
-      printWindow.webContents.print(options.config, (success) => {
-        if (success) console.log('打印成功');
-        printWindow.close(); // 关闭窗口
+    try {
+      const htmlDocument = buildPrintHtmlDocument(options.content);
+      fs.writeFileSync(htmlTempPath, htmlDocument, 'utf8');
+      await printWindow.loadFile(htmlTempPath);
+      const printOptions = buildPrintOptionsFromConfig(options.config ?? {});
+      await new Promise((resolve) => {
+        printWindow.webContents.print(printOptions, (success, failureReason) => {
+          if (!success) console.error('打印失败:', failureReason);
+          resolve();
+        });
       });
-    });
+    } catch (err) {
+      console.error('打印 HTML 失败:', err);
+    } finally {
+      if (!printWindow.isDestroyed()) printWindow.close();
+      removePrintTempFile(htmlTempPath);
+    }
   });
 }
 
