@@ -140,6 +140,70 @@ async function applyShortcutIconFromUrl(url) {
   return { success: true, updated };
 }
 
+/** @param {string} name */
+function validateShortcutName(name) {
+  if (!name || typeof name !== 'string') throw new Error('无效的快捷方式名称');
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('无效的快捷方式名称');
+  if (/[\\/:*?"<>|]/.test(trimmed)) throw new Error('快捷方式名称包含非法字符');
+  return trimmed;
+}
+
+/**
+ * Windows：重命名桌面指向本 exe 的快捷方式（修改 .lnk 文件名）
+ * @param {string} name
+ * @returns {Promise<number>}
+ */
+async function updateWindowsDesktopShortcutName(name) {
+  const exePath = process.execPath;
+  const psExePath = exePath.replace(/'/g, "''");
+  const psName = name.replace(/'/g, "''");
+  const psDesktopDir = app.getPath('desktop').replace(/'/g, "''");
+  const script = [
+    `$exePath = '${psExePath}'`,
+    `$newName = '${psName}'`,
+    `$desktopDir = '${psDesktopDir}'`,
+    '$shell = New-Object -ComObject WScript.Shell',
+    '$updated = 0',
+    'if (-not (Test-Path $desktopDir)) { Write-Output 0; exit }',
+    'Get-ChildItem -Path $desktopDir -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {',
+    '  try {',
+    '    $shortcut = $shell.CreateShortcut($_.FullName)',
+    '    if ($shortcut.TargetPath -ieq $exePath) {',
+    '      $newPath = Join-Path $desktopDir ($newName + \'.lnk\')',
+    '      if ($_.FullName -ieq $newPath) { $updated++; return }',
+    '      if (Test-Path $newPath) { Remove-Item -LiteralPath $newPath -Force }',
+    '      Rename-Item -LiteralPath $_.FullName -NewName ($newName + \'.lnk\')',
+    '      $updated++',
+    '    }',
+    '  } catch {}',
+    '}',
+    'Write-Output $updated'
+  ].join('\n');
+
+  const { stdout } = await execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    { windowsHide: true }
+  );
+  return parseInt(String(stdout).trim(), 10) || 0;
+}
+
+/**
+ * 修改桌面快捷方式显示名称
+ * @param {string} name
+ */
+async function applyDesktopShortcutName(name) {
+  if (process.platform !== 'win32') throw new Error('仅支持 Windows');
+
+  const shortcutName = validateShortcutName(name);
+  const updated = await updateWindowsDesktopShortcutName(shortcutName);
+  if (updated === 0) {
+    console.warn('未找到桌面上的本应用快捷方式');
+  }
+  return { success: true, updated };
+}
+
 /**************************************print*************************************************/
 // 打印 HTML 文档标题
 const PRINT_HTML_DOCUMENT_TITLE = '打印';
@@ -308,6 +372,12 @@ function initIPC(mainWindow) {
     if (process.platform !== 'win32') throw new Error('仅支持 Windows');
     if (!imageUrl || typeof imageUrl !== 'string') throw new Error('无效的图标地址');
     return applyShortcutIconFromUrl(imageUrl);
+  });
+
+  // 前端修改桌面快捷方式名称
+  ipcMain.handle('set-shortcut-name', async (event, name) => {
+    if (process.platform !== 'win32') throw new Error('仅支持 Windows');
+    return applyDesktopShortcutName(name);
   });
 
   // 打印html：隐藏窗口加载 HTML 后 silent 静默直打（与前端 table-print-dialog 的 config 配套）

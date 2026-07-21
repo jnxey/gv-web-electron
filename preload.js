@@ -55,5 +55,9 @@ contextBridge.exposeInMainWorld('electron', {
   // 设置桌面快捷方式图标（传入可访问的 .ico 地址）
   setShortcutIcon: (imageUrl) => {
     return ipcRenderer.invoke('set-shortcut-icon', imageUrl);
+  },
+  // 修改桌面快捷方式名称
+  setShortcutName: (name) => {
+    return ipcRenderer.invoke('set-shortcut-name', name);
   }
 });
