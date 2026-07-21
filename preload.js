@@ -51,5 +51,9 @@ contextBridge.exposeInMainWorld('electron', {
   // 离线页重试：再次加载 config.root_url
   retryRootUrl: () => {
     return ipcRenderer.invoke('retry-root-url');
+  },
+  // 设置桌面快捷方式图标（传入可访问的 .ico 地址）
+  setShortcutIcon: (imageUrl) => {
+    return ipcRenderer.invoke('set-shortcut-icon', imageUrl);
   }
 });

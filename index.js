@@ -1,8 +1,11 @@
-const { app, BrowserWindow, screen, ipcMain, globalShortcut, Menu, session } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, globalShortcut, Menu, session, net } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
 const os = require('os');
-const { fork } = require('child_process');
+const { fork, execFile } = require('child_process');
+const { promisify } = require('util');
+
+const execFileAsync = promisify(execFile);
 
 /**************************************tools*************************************************/
 const tools = {
@@ -33,6 +36,109 @@ const tools = {
     return app.isPackaged ? path.join(process.resourcesPath, url) : path.join(__dirname, 'resources/' + url);
   }
 };
+
+/**************************************shortcutIcon*************************************************/
+// 快捷方式图标本地文件名（前端传入 .ico 地址）
+const SHORTCUT_ICON_FILE_NAME = 'shortcut.ico';
+
+/** @returns {string} 快捷方式图标本地路径 */
+function getShortcutIconPath() {
+  return path.join(app.getPath('userData'), 'icons', SHORTCUT_ICON_FILE_NAME);
+}
+
+/** 确保图标目录存在 */
+function ensureShortcutIconDir() {
+  const dir = path.dirname(getShortcutIconPath());
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+/** @param {string} url */
+async function downloadIcoBuffer(url) {
+  const response = await net.fetch(url);
+  if (!response.ok) {
+    throw new Error(`下载图标失败: ${response.status} ${response.statusText}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/** @param {Buffer} buffer */
+function isIcoBuffer(buffer) {
+  return buffer.length >= 4 && buffer[0] === 0 && buffer[1] === 0 && buffer[2] === 1 && buffer[3] === 0;
+}
+
+/**
+ * 将 .ico buffer 写入本地，供快捷方式 IconLocation 引用
+ * @param {Buffer} buffer
+ * @returns {string}
+ */
+function saveIcoFromBuffer(buffer) {
+  if (!isIcoBuffer(buffer)) throw new Error('无效的图片格式，请传入 .ico 地址');
+
+  ensureShortcutIconDir();
+  const icoPath = getShortcutIconPath();
+  fs.writeFileSync(icoPath, buffer);
+  return icoPath;
+}
+
+/**
+ * Windows：更新桌面与开始菜单中指向本 exe 的快捷方式图标
+ * @param {string} icoPath
+ * @returns {Promise<number>} 更新的快捷方式数量
+ */
+async function updateWindowsShortcutIcons(icoPath) {
+  const exePath = process.execPath;
+  const psExePath = exePath.replace(/'/g, "''");
+  const psIcoPath = path.resolve(icoPath).replace(/'/g, "''");
+  const searchDirs = [
+    app.getPath('desktop'),
+    path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+  ];
+  const psSearchDirs = searchDirs.map((dir) => `'${dir.replace(/'/g, "''")}'`).join(', ');
+  const script = [
+    `$exePath = '${psExePath}'`,
+    `$iconPath = '${psIcoPath}'`,
+    `$searchDirs = @(${psSearchDirs})`,
+    '$shell = New-Object -ComObject WScript.Shell',
+    '$updated = 0',
+    'foreach ($dir in $searchDirs) {',
+    '  if (-not (Test-Path $dir)) { continue }',
+    '  Get-ChildItem -Path $dir -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {',
+    '    try {',
+    '      $shortcut = $shell.CreateShortcut($_.FullName)',
+    '      if ($shortcut.TargetPath -ieq $exePath) {',
+    '        $shortcut.IconLocation = "$iconPath,0"',
+    '        $shortcut.Save()',
+    '        $updated++',
+    '      }',
+    '    } catch {}',
+    '  }',
+    '}',
+    'Write-Output $updated'
+  ].join('\n');
+
+  const { stdout } = await execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    { windowsHide: true }
+  );
+  return parseInt(String(stdout).trim(), 10) || 0;
+}
+
+/**
+ * 从 .ico URL 下载并更新快捷方式图标
+ * @param {string} url
+ */
+async function applyShortcutIconFromUrl(url) {
+  if (process.platform !== 'win32') throw new Error('仅支持 Windows');
+
+  const buffer = await downloadIcoBuffer(url);
+  const icoPath = saveIcoFromBuffer(buffer);
+  const updated = await updateWindowsShortcutIcons(icoPath);
+  if (updated === 0) {
+    console.warn('未找到指向本应用的快捷方式，图标已写入:', icoPath);
+  }
+  return { success: true, updated };
+}
 
 /**************************************print*************************************************/
 // 打印 HTML 文档标题
@@ -195,6 +301,13 @@ function initIPC(mainWindow) {
   // 离线页点击「重新连接」时，再次尝试加载 config.root_url
   ipcMain.handle('retry-root-url', () => {
     loadRootUrl(mainWindow);
+  });
+
+  // 前端设置桌面快捷方式图标（传入可访问的 .ico 地址）
+  ipcMain.handle('set-shortcut-icon', async (event, imageUrl) => {
+    if (process.platform !== 'win32') throw new Error('仅支持 Windows');
+    if (!imageUrl || typeof imageUrl !== 'string') throw new Error('无效的图标地址');
+    return applyShortcutIconFromUrl(imageUrl);
   });
 
   // 打印html：隐藏窗口加载 HTML 后 silent 静默直打（与前端 table-print-dialog 的 config 配套）
