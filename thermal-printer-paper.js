@@ -163,7 +163,7 @@ async function queryThermalPrinterPaperStatusOnPort(options) {
       return { ok: false, error: 'TIMEOUT' };
     }
     console.error('[thermal-printer-paper] query failed:', err);
-    return { ok: false, error: 'SERIAL_ERROR' };
+    return { ok: false, error: 'SERIAL_ERROR', errorDetail: message };
   } finally {
     if (port && port.isOpen) {
       await new Promise((resolve) => {

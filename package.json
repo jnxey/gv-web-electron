@@ -77,6 +77,13 @@
         ]
       },
       {
+        "from": "node_modules/koffi/",
+        "to": "app/node_modules/koffi/",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
         "from": "ffmpeg.exe",
         "to": "app/ffmpeg.exe",
         "filter": [
@@ -94,12 +101,12 @@
   },
   "devDependencies": {
     "@electron/fuses": "^1.8.0",
+    "axios": "^1.13.2",
     "electron": "^33.2.1",
     "electron-builder": "^26.0.12",
+    "koffi": "^2.16.3",
     "prettier": "^3.4.2",
-    "axios": "^1.13.2",
     "serialport": "^13.0.0",
     "ws": "^8.18.3"
-  },
-  "dependencies": {}
+  }
 }

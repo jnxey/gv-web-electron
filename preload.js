@@ -40,9 +40,21 @@ contextBridge.exposeInMainWorld('electron', {
   printHtml: async (options) => {
     return ipcRenderer.invoke('print-html', options);
   },
-  // KP-80A 热敏打印机缺纸检测（虚拟 COM + ESC/POS DLE EOT）
+  // KP-80A 热敏打印机缺纸检测（autoreplyprint SDK / legacy COM）
   queryThermalPrinterPaperStatus: async () => {
     return ipcRenderer.invoke('query-thermal-printer-paper-status');
+  },
+  // autoreplyprint SDK 端口列表
+  getAutoreplyprintPorts: async () => {
+    return ipcRenderer.invoke('get-autoreplyprint-ports');
+  },
+  // autoreplyprint SDK 指定端口缺纸检测（配置页测试）
+  queryAutoreplyprintPaperStatus: async (options) => {
+    return ipcRenderer.invoke('query-autoreplyprint-paper-status', options ?? {});
+  },
+  // autoreplyprint SDK 打印后校验
+  verifyAutoreplyprintPrintJob: async () => {
+    return ipcRenderer.invoke('verify-autoreplyprint-print-job');
   },
   // 获取本机串口列表
   getSerialPorts: async () => {

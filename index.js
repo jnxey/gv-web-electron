@@ -6,6 +6,12 @@ const { fork, execFile } = require('child_process');
 const { promisify } = require('util');
 
 const { queryThermalPrinterPaperStatus } = require('./thermal-printer-paper');
+const {
+  listAutoreplyprintPorts,
+  queryConfiguredPaperStatus,
+  queryPaperStatusOnPort,
+  verifyPrintJobOnConfiguredPort
+} = require('./autoreplyprint-bridge');
 const { SerialPort } = require('serialport');
 
 const execFileAsync = promisify(execFile);
@@ -380,7 +386,53 @@ function initIPC(mainWindow) {
     return [...list];
   });
 
-  // 获取本机串口列表（SerialPort.list）
+  // autoreplyprint SDK：枚举 USB / COM 口（KP-80A 等，CP001 走 USB）
+  ipcMain.handle('get-autoreplyprint-ports', async () => {
+    return listAutoreplyprintPorts();
+  });
+
+  // autoreplyprint SDK：按 config 检测缺纸（优先 SDK，legacy COM 仅作兜底）
+  ipcMain.handle('query-thermal-printer-paper-status', async () => {
+    const localConfig = tools.getConfig();
+    const sdkResult = await queryConfiguredPaperStatus(localConfig);
+    if (sdkResult.error !== 'NOT_CONFIGURED' && sdkResult.error !== 'SDK_NOT_LOADED') {
+      return sdkResult;
+    }
+
+    const comPort = String(localConfig?.thermal_printer_com_port ?? localConfig?.thermal_printer_port ?? '').trim();
+    if (comPort === '' || !/^COM\d+$/i.test(comPort)) {
+      return sdkResult;
+    }
+
+    const baudRate = Number(localConfig?.thermal_printer_baud_rate);
+    return queryThermalPrinterPaperStatus({
+      path: comPort,
+      baudRate: Number.isFinite(baudRate) && baudRate > 0 ? baudRate : undefined
+    });
+  });
+
+  // autoreplyprint SDK：测试页面临时端口检测
+  ipcMain.handle('query-autoreplyprint-paper-status', async (event, options) => {
+    const port = String(options?.port ?? '').trim();
+    const type = options?.type === 'com' ? 'com' : 'usb';
+    const baudRate = Number(options?.baudRate);
+    if (port === '') {
+      return { ok: false, error: 'NOT_CONFIGURED', paperOut: false };
+    }
+    return queryPaperStatusOnPort({
+      port,
+      type,
+      baudRate: Number.isFinite(baudRate) && baudRate > 0 ? baudRate : 19200
+    });
+  });
+
+  // autoreplyprint SDK：静默 HTML 打印提交后校验出纸/错误
+  ipcMain.handle('verify-autoreplyprint-print-job', async () => {
+    const localConfig = tools.getConfig();
+    return verifyPrintJobOnConfiguredPort(localConfig);
+  });
+
+  // 获取本机串口列表（SerialPort.list，legacy）
   ipcMain.handle('get-serial-ports', async () => {
     try {
       const list = await SerialPort.list();
@@ -397,17 +449,6 @@ function initIPC(mainWindow) {
       console.error('[electron] get-serial-ports failed:', err);
       return [];
     }
-  });
-
-  // KP-80A 等 ESC/POS 热敏打印机缺纸检测（虚拟 COM + DLE EOT）
-  ipcMain.handle('query-thermal-printer-paper-status', async () => {
-    const localConfig = tools.getConfig();
-    const comPort = String(localConfig?.thermal_printer_com_port ?? '').trim();
-    const baudRate = Number(localConfig?.thermal_printer_baud_rate);
-    return queryThermalPrinterPaperStatus({
-      path: comPort,
-      baudRate: Number.isFinite(baudRate) && baudRate > 0 ? baudRate : undefined
-    });
   });
 
   // 离线页点击「重新连接」时，再次尝试加载 config.root_url
@@ -438,14 +479,16 @@ function initIPC(mainWindow) {
       fs.writeFileSync(htmlTempPath, htmlDocument, 'utf8');
       await printWindow.loadFile(htmlTempPath);
       const printOptions = buildPrintOptionsFromConfig(options.config ?? {});
-      await new Promise((resolve) => {
+      const printResult = await new Promise((resolve) => {
         printWindow.webContents.print(printOptions, (success, failureReason) => {
           if (!success) console.error('打印失败:', failureReason);
-          resolve();
+          resolve({ success: success === true, failureReason: failureReason ?? '' });
         });
       });
+      return printResult;
     } catch (err) {
       console.error('打印 HTML 失败:', err);
+      return { success: false, failureReason: err instanceof Error ? err.message : String(err) };
     } finally {
       if (!printWindow.isDestroyed()) printWindow.close();
       removePrintTempFile(htmlTempPath);
