@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld('electron', {
   queryThermalPrinterPaperStatus: async () => {
     return ipcRenderer.invoke('query-thermal-printer-paper-status');
   },
+  // 获取本机串口列表
+  getSerialPorts: async () => {
+    return ipcRenderer.invoke('get-serial-ports');
+  },
   // 获取是否是全屏
   getFullscreen: async () => {
     return ipcRenderer.invoke('get-fullscreen');

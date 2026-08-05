@@ -6,6 +6,7 @@ const { fork, execFile } = require('child_process');
 const { promisify } = require('util');
 
 const { queryThermalPrinterPaperStatus } = require('./thermal-printer-paper');
+const { SerialPort } = require('serialport');
 
 const execFileAsync = promisify(execFile);
 
@@ -379,13 +380,32 @@ function initIPC(mainWindow) {
     return [...list];
   });
 
+  // 获取本机串口列表（SerialPort.list）
+  ipcMain.handle('get-serial-ports', async () => {
+    try {
+      const list = await SerialPort.list();
+      return list
+        .map((item) => ({
+          path: item.path,
+          manufacturer: item.manufacturer || '',
+          friendlyName: item.friendlyName || '',
+          serialNumber: item.serialNumber || ''
+        }))
+        .filter((item) => typeof item.path === 'string' && item.path.trim() !== '')
+        .sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+    } catch (err) {
+      console.error('[electron] get-serial-ports failed:', err);
+      return [];
+    }
+  });
+
   // KP-80A 等 ESC/POS 热敏打印机缺纸检测（虚拟 COM + DLE EOT）
   ipcMain.handle('query-thermal-printer-paper-status', async () => {
     const localConfig = tools.getConfig();
     const comPort = String(localConfig?.thermal_printer_com_port ?? '').trim();
     const baudRate = Number(localConfig?.thermal_printer_baud_rate);
     return queryThermalPrinterPaperStatus({
-      port: comPort,
+      path: comPort,
       baudRate: Number.isFinite(baudRate) && baudRate > 0 ? baudRate : undefined
     });
   });
