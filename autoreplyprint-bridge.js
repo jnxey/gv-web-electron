@@ -328,10 +328,27 @@ function resolvePortFromConfig(localConfig) {
 }
 
 /**
+ * 校验 SDK 端口名是否允许打开。
+ * @param {unknown} port
+ * @returns {boolean}
+ */
+function isPrinterPortAllowed(port) {
+  const trimmed = String(port ?? '').trim();
+  if (trimmed === '' || trimmed.length > 64) return false;
+  if (/[\0\r\n\\/<>"|?*]/.test(trimmed)) return false;
+  return true;
+}
+
+/**
  * @param {AutoreplyprintPortRef & { baudRate?: number }} portRef
  * @returns {Promise<Record<string, unknown>>}
  */
 async function queryPaperStatusOnPort(portRef) {
+  const port = String(portRef?.port ?? '').trim();
+  if (!isPrinterPortAllowed(port)) {
+    return { ok: false, error: 'INVALID_PORT', paperOut: false };
+  }
+
   return withSdkMutex(async () => {
     if (!ensureLibLoaded()) return sdkNotLoadedResult();
 
@@ -419,13 +436,15 @@ async function verifyPrintJobOnConfiguredPort(localConfig, options = {}) {
       const { rtStatus, rtParsed, errorStatus, infoStatus } = queryStatusOnHandle(handle);
 
       const paperOut = rtParsed?.paperOut === true || (Number(errorStatus) & CP_PRINTER_ERROR_NOPAPER) !== 0;
-      const printSuccess = printResult !== 0 && paperOut !== true;
+      // HTML 静默打印走 Windows spooler，QueryPrintResult 对 spooler 任务通常无效；仅以缺纸为准。
+      const printSuccess = paperOut !== true;
 
       return {
         ok: true,
         printSuccess,
         paperOut,
         printResult,
+        spoolerMode: true,
         raw: { rtStatus, rtParsed, errorStatus, infoStatus }
       };
     } catch (err) {
@@ -442,5 +461,6 @@ module.exports = {
   queryConfiguredPaperStatus,
   queryPaperStatusOnPort,
   verifyPrintJobOnConfiguredPort,
-  resolvePortFromConfig
+  resolvePortFromConfig,
+  isPrinterPortAllowed
 };

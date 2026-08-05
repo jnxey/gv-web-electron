@@ -10,7 +10,8 @@ const {
   listAutoreplyprintPorts,
   queryConfiguredPaperStatus,
   queryPaperStatusOnPort,
-  verifyPrintJobOnConfiguredPort
+  verifyPrintJobOnConfiguredPort,
+  isPrinterPortAllowed
 } = require('./autoreplyprint-bridge');
 const { SerialPort } = require('serialport');
 
@@ -360,7 +361,16 @@ function initIPC(mainWindow) {
 
   // 设置本地config
   ipcMain.handle('set-local-config', (event, options) => {
-    return tools.setConfig(options);
+    try {
+      tools.setConfig(options);
+      return { ok: true };
+    } catch (err) {
+      console.error('[electron] set-local-config failed:', err);
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
   });
 
   // 设置是否全屏
@@ -418,6 +428,9 @@ function initIPC(mainWindow) {
     const baudRate = Number(options?.baudRate);
     if (port === '') {
       return { ok: false, error: 'NOT_CONFIGURED', paperOut: false };
+    }
+    if (!isPrinterPortAllowed(port)) {
+      return { ok: false, error: 'INVALID_PORT', paperOut: false };
     }
     return queryPaperStatusOnPort({
       port,
