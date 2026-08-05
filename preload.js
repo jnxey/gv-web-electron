@@ -40,6 +40,10 @@ contextBridge.exposeInMainWorld('electron', {
   printHtml: async (options) => {
     return ipcRenderer.invoke('print-html', options);
   },
+  // KP-80A 热敏打印机缺纸检测（虚拟 COM + ESC/POS DLE EOT）
+  queryThermalPrinterPaperStatus: async () => {
+    return ipcRenderer.invoke('query-thermal-printer-paper-status');
+  },
   // 获取是否是全屏
   getFullscreen: async () => {
     return ipcRenderer.invoke('get-fullscreen');

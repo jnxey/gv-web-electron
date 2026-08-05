@@ -1,1 +1,12 @@
-{"root_url":"","install_name":"","app_name":"XCH-GAME","app_favicon":"","fullscreen":false,"table_id":null}
+{
+  "root_url": "",
+  "install_name": "",
+  "app_name": "XCH-GAME",
+  "app_favicon": "",
+  "fullscreen": false,
+  "table_id": null,
+  "consumption_counter": false,
+  "thermal_printer_com_port": "",
+  "thermal_printer_baud_rate": 19200,
+  "thermal_printer_paper_check_strict": false
+}

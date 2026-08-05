@@ -5,6 +5,8 @@ const os = require('os');
 const { fork, execFile } = require('child_process');
 const { promisify } = require('util');
 
+const { queryThermalPrinterPaperStatus } = require('./thermal-printer-paper');
+
 const execFileAsync = promisify(execFile);
 
 /**************************************tools*************************************************/
@@ -81,6 +83,19 @@ function saveIcoFromBuffer(buffer) {
 }
 
 /**
+ * Windows：通知 Shell 刷新桌面/图标缓存（避免需手动 F5 刷新桌面）
+ */
+async function notifyWindowsShellRefresh() {
+  const script = [
+    'Add-Type -MemberDefinition \'[DllImport("shell32.dll")] public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);\' -Name ShellNotify -Namespace Win32',
+    '[Win32.ShellNotify]::SHChangeNotify(0x8000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)' // SHCNE_ASSOCCHANGED
+  ].join('; ');
+  await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+    windowsHide: true
+  });
+}
+
+/**
  * Windows：更新桌面与开始菜单中指向本 exe 的快捷方式图标
  * @param {string} icoPath
  * @returns {Promise<number>} 更新的快捷方式数量
@@ -134,6 +149,7 @@ async function applyShortcutIconFromUrl(url) {
   const buffer = await downloadIcoBuffer(url);
   const icoPath = saveIcoFromBuffer(buffer);
   const updated = await updateWindowsShortcutIcons(icoPath);
+  if (updated > 0) await notifyWindowsShellRefresh();
   if (updated === 0) {
     console.warn('未找到指向本应用的快捷方式，图标已写入:', icoPath);
   }
@@ -198,6 +214,7 @@ async function applyDesktopShortcutName(name) {
 
   const shortcutName = validateShortcutName(name);
   const updated = await updateWindowsDesktopShortcutName(shortcutName);
+  if (updated > 0) await notifyWindowsShellRefresh();
   if (updated === 0) {
     console.warn('未找到桌面上的本应用快捷方式');
   }
@@ -360,6 +377,17 @@ function initIPC(mainWindow) {
     const list = await printWindow.webContents.getPrintersAsync();
     printWindow.close();
     return [...list];
+  });
+
+  // KP-80A 等 ESC/POS 热敏打印机缺纸检测（虚拟 COM + DLE EOT）
+  ipcMain.handle('query-thermal-printer-paper-status', async () => {
+    const localConfig = tools.getConfig();
+    const comPort = String(localConfig?.thermal_printer_com_port ?? '').trim();
+    const baudRate = Number(localConfig?.thermal_printer_baud_rate);
+    return queryThermalPrinterPaperStatus({
+      port: comPort,
+      baudRate: Number.isFinite(baudRate) && baudRate > 0 ? baudRate : undefined
+    });
   });
 
   // 离线页点击「重新连接」时，再次尝试加载 config.root_url
