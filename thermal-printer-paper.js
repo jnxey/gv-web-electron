@@ -141,6 +141,10 @@ async function queryThermalPrinterPaperStatusOnPort(options) {
     });
 
     const offlineStatus = await queryEscPosStatusByte(port, ESCPOS_CMD_DLE_EOT_OFFLINE);
+    if (offlineStatus === null) {
+      return { ok: false, error: 'TIMEOUT' };
+    }
+
     let sensorStatus = null;
     try {
       sensorStatus = await queryEscPosStatusByte(port, ESCPOS_CMD_DLE_EOT_PAPER_SENSOR);
