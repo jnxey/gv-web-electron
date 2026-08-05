@@ -140,20 +140,102 @@ function parsePrinterStatus(errorStatus, infoStatus) {
  */
 
 /**
- * @returns {{ usb: string[], com: string[], sdkLoaded: boolean, error?: string }}
+ * 从 USB 端口名提取 VID:PID 键（用于去重）。
+ * @param {string} port
+ * @returns {string|null}
+ */
+function parseUsbPortVidPidKey(port) {
+  const vidMatch = String(port).match(/vid[_:]([0-9a-f]+)/i);
+  const pidMatch = String(port).match(/pid[_:]([0-9a-f]+)/i);
+  if (!vidMatch || !pidMatch) return null;
+  return `${vidMatch[1].toLowerCase()}:${pidMatch[1].toLowerCase()}`;
+}
+
+/**
+ * USB 枚举去重：同一 VID/PID 只保留一项，优先短名 `VID:...`（OpenUsb 用这个）。
+ * @param {string[]} rawPorts
+ * @returns {Array<{ id: string, vid?: string, pid?: string }>}
+ */
+function buildUsbPortOptions(rawPorts) {
+  /** @type {Map<string, { id: string, vid?: string, pid?: string, preferRank: number }>} */
+  const grouped = new Map();
+
+  for (const port of rawPorts) {
+    const id = String(port ?? '').trim();
+    if (id === '') continue;
+
+    const vidPidKey = parseUsbPortVidPidKey(id);
+    const groupKey = vidPidKey ?? id;
+    const preferRank = /^VID:/i.test(id) ? 0 : id.startsWith('\\\\?\\usb#') ? 1 : 2;
+    const [vid, pid] = vidPidKey ? vidPidKey.split(':') : [];
+    const candidate = {
+      id,
+      ...(vid && pid ? { vid: vid.toUpperCase(), pid: pid.toUpperCase() } : {}),
+      preferRank
+    };
+    const existing = grouped.get(groupKey);
+
+    if (!existing || candidate.preferRank < existing.preferRank) {
+      grouped.set(groupKey, candidate);
+    }
+  }
+
+  return [...grouped.values()]
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
+    .map(({ id, vid, pid }) => (vid && pid ? { id, vid, pid } : { id }));
+}
+
+/**
+ * @typedef {{ id: string, vid?: string, pid?: string }} AutoreplyprintUsbPortOption */
+/** @typedef {{ id: string }} AutoreplyprintComPortOption */
+
+/**
+ * @param {string[]} rawPorts
+ * @returns {Array<{ id: string }>}
+ */
+function buildComPortOptions(rawPorts) {
+  return rawPorts
+    .map((port) => String(port ?? '').trim())
+    .filter((port) => port !== '')
+    .map((id) => ({ id }))
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+}
+
+/**
+ * @returns {{
+ *   usb: string[],
+ *   com: string[],
+ *   usbOptions: AutoreplyprintUsbPortOption[],
+ *   comOptions: AutoreplyprintComPortOption[],
+ *   sdkLoaded: boolean,
+ *   error?: string
+ * }}
  */
 function listAutoreplyprintPorts() {
   if (!ensureLibLoaded()) {
-    return { usb: [], com: [], sdkLoaded: false, error: loadError ?? 'SDK_NOT_LOADED' };
+    return {
+      usb: [],
+      com: [],
+      usbOptions: [],
+      comOptions: [],
+      sdkLoaded: false,
+      error: loadError ?? 'SDK_NOT_LOADED'
+    };
   }
 
   const CP_Port_EnumUsb = lib.func('CP_Port_EnumUsb', 'uint', ['char *', 'uint', 'void *']);
   const CP_Port_EnumCom = lib.func('CP_Port_EnumCom', 'uint', ['char *', 'uint', 'void *']);
 
-  const usb = enumPorts((buf, size) => CP_Port_EnumUsb(buf, size, null));
-  const com = enumPorts((buf, size) => CP_Port_EnumCom(buf, size, null));
+  const usbOptions = buildUsbPortOptions(enumPorts((buf, size) => CP_Port_EnumUsb(buf, size, null)));
+  const comOptions = buildComPortOptions(enumPorts((buf, size) => CP_Port_EnumCom(buf, size, null)));
 
-  return { usb, com, sdkLoaded: true };
+  return {
+    usb: usbOptions.map((item) => item.id),
+    com: comOptions.map((item) => item.id),
+    usbOptions,
+    comOptions,
+    sdkLoaded: true
+  };
 }
 
 /**
