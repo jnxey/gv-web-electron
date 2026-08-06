@@ -9,7 +9,7 @@ const { app } = require('electron');
 const {
   resolveTxScannerSidecarLogPath,
   appendTxScannerSidecarLog,
-  readTxScannerSidecarLogTail
+  isTxScannerDebugLogEnabled
 } = require('./tx-scanner-sidecar-log');
 const { getTxScannerUsbHostDiagnoseAsync } = require('./tx-scanner-usb-check');
 
@@ -214,15 +214,20 @@ function ensureSidecarProcess() {
     appendTxScannerSidecarLog(logPath, 'host', 'spawn sidecar', { mode: runtime.mode, libDir, logPath });
     const sidecarCwd =
       runtime.mode === 'native' ? path.dirname(runtime.nativeSidecarExe) : resolveSidecarCwd();
+    const spawnEnv = {
+      ...process.env,
+      TX_SCANNER_DLL_DIR: libDir
+    };
+    if (isTxScannerDebugLogEnabled()) {
+      spawnEnv.TX_SCANNER_LOG_FILE = logPath;
+    } else {
+      delete spawnEnv.TX_SCANNER_LOG_FILE;
+    }
     const spawnOptions = {
       cwd: sidecarCwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
-      env: {
-        ...process.env,
-        TX_SCANNER_DLL_DIR: libDir,
-        TX_SCANNER_LOG_FILE: logPath
-      }
+      env: spawnEnv
     };
 
     /** @type {import('node:child_process').ChildProcess} */
@@ -399,7 +404,7 @@ function shouldLogSidecarStdout(msg) {
 }
 
 /**
- * @param {{ quick?: boolean, forceUsbRefresh?: boolean, includeSidecarLog?: boolean }} [options]
+ * @param {{ quick?: boolean, forceUsbRefresh?: boolean }} [options]
  * @returns {Promise<Record<string, unknown>>}
  */
 async function getSidecarTxScannerStatus(options = {}) {
@@ -433,12 +438,6 @@ async function getSidecarTxScannerStatus(options = {}) {
     usbHostDiagnose,
     ...runtime
   };
-
-  if (options.includeSidecarLog === true) {
-    const logPath = resolveTxScannerSidecarLogPath(() => libDir);
-    base.sidecarLogPath = logPath;
-    base.sidecarLogTail = readTxScannerSidecarLogTail(logPath, 40);
-  }
 
   if (usbHostDiagnose?.mode === 'hid_keyboard') {
     return {
@@ -579,8 +578,13 @@ async function startSidecarTxScanner(options = {}) {
       },
       35000
     );
-    appendTxScannerSidecarLog(resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()), 'host', 'start result', result);
-    return { ...result, bridgeMode: 'sidecar', sidecarLogTail: readTxScannerSidecarLogTail(resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()), 60) };
+    appendTxScannerSidecarLog(
+      resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()),
+      'host',
+      'start result',
+      result
+    );
+    return { ...result, bridgeMode: 'sidecar' };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const errorCode =
@@ -644,7 +648,5 @@ module.exports = {
   startSidecarTxScanner,
   stopSidecarTxScanner,
   deinitSidecarTxScanner,
-  resolveTxScannerSidecarLogPath: () => resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()),
-  readTxScannerSidecarLogTail: (maxLines) =>
-    readTxScannerSidecarLogTail(resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()), maxLines)
+  resolveTxScannerSidecarLogPath: () => resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar())
 };

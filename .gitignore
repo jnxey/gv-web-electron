@@ -14,3 +14,4 @@ out/
 
 resources/app/vendor
 resources/app/apk
+resources/app/lib/tx-scanner-sidecar.log

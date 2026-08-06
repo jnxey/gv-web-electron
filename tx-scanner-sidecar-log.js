@@ -1,8 +1,16 @@
 /**
- * TX 扫码侧车日志：写入 resources/app/lib/tx-scanner-sidecar.log
+ * TX 扫码侧车日志（默认关闭，避免生产环境持续写 lib/tx-scanner-sidecar.log）。
+ * 排查时在启动 Electron 前设置：TX_SCANNER_DEBUG_LOG=1
  */
 const fs = require('node:fs');
 const path = require('node:path');
+
+/**
+ * @returns {boolean}
+ */
+function isTxScannerDebugLogEnabled() {
+  return process.env.TX_SCANNER_DEBUG_LOG === '1' || process.env.TX_SCANNER_DEBUG_LOG === 'true';
+}
 
 /**
  * @param {() => string} resolveLibDir
@@ -19,6 +27,8 @@ function resolveTxScannerSidecarLogPath(resolveLibDir) {
  * @param {Record<string, unknown>} [extra]
  */
 function appendTxScannerSidecarLog(logPath, scope, message, extra) {
+  if (!isTxScannerDebugLogEnabled()) return;
+
   const ts = new Date().toISOString();
   const suffix =
     extra && Object.keys(extra).length > 0 ? ` ${JSON.stringify(extra)}` : '';
@@ -36,6 +46,8 @@ function appendTxScannerSidecarLog(logPath, scope, message, extra) {
  * @returns {string[]}
  */
 function readTxScannerSidecarLogTail(logPath, maxLines = 80) {
+  if (!isTxScannerDebugLogEnabled()) return [];
+
   try {
     if (!fs.existsSync(logPath)) return [];
     const content = fs.readFileSync(logPath, 'utf8');
@@ -47,6 +59,7 @@ function readTxScannerSidecarLogTail(logPath, maxLines = 80) {
 }
 
 module.exports = {
+  isTxScannerDebugLogEnabled,
   resolveTxScannerSidecarLogPath,
   appendTxScannerSidecarLog,
   readTxScannerSidecarLogTail

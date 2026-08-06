@@ -93,3 +93,80 @@
 [2026-08-06T07:48:19.142Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_8\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
 [2026-08-06T07:48:32.125Z] [host] stdin {"cmd":"status","requestId":"req_9"}
 [2026-08-06T07:48:32.133Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_9\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T09:07:06.837Z] [host] spawn sidecar {"mode":"native","libDir":"D:\\Work\\gv-web-electron\\resources\\app\\lib","logPath":"D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log"}
+2026-08-06 17:07:06 set_cwd_to_exe_dir cwd=D:\Work\gv-web-electron\resources\app\tx-scanner-native-sidecar
+2026-08-06 17:07:06 ensure_lib_loaded libDir=D:\Work\gv-web-electron\resources\app\lib dllPath=D:\Work\gv-web-electron\resources\app\lib\tx_windows_fdata.dll
+[2026-08-06T09:07:06.908Z] [host] stderr {"text":"[native-sidecar] set_cwd_to_exe_dir cwd=D:\\Work\\gv-web-electron\\resources\\app\\tx-scanner-native-sidecar\r\n[native-sidecar] ensure_lib_loaded libDir=D:\\Work\\gv-web-electron\\resources\\app\\lib dllPath=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx_windows_fdata.dll\r\n"}
+2026-08-06 17:07:06 LoadLibrary ok handle=57CE0000
+2026-08-06 17:07:06 boot loaded=1 logFile=D:\Work\gv-web-electron\resources\app\lib\tx-scanner-sidecar.log
+2026-08-06 17:07:06 tx_scanner_decode_data_fun_register ret=0
+2026-08-06 17:07:06 tx_scanner_comm_state_fun_register ret=0
+[2026-08-06T09:07:06.911Z] [host] stderr {"text":"[native-sidecar] LoadLibrary ok handle=57CE0000\r\n[native-sidecar] boot loaded=1 logFile=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log\r\n[native-sidecar] tx_scanner_decode_data_fun_register ret=0\r\n[native-sidecar] tx_scanner_comm_state_fun_register ret=0\r\n"}
+2026-08-06 17:07:07 tx_scanner_init ret=0
+2026-08-06 17:07:07 tx_scanner_init done connected=-1
+[2026-08-06T09:07:07.224Z] [host] stdout {"line":"{\"type\":\"ready\",\"ok\":true,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"dllPath\":\"D:\\\\Work\\\\gv-web-electron\\\\resources\\\\app\\\\lib\\\\tx_windows_fdata.dll\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T09:07:07.225Z] [host] stdin {"cmd":"stop","requestId":"req_1"}
+[2026-08-06T09:07:07.225Z] [host] stderr {"text":"[native-sidecar] tx_scanner_init ret=0\r\n[native-sidecar] tx_scanner_init done connected=-1\r\n"}
+[2026-08-06T09:07:07.229Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_1\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:07:46.261Z] [host] stdin {"cmd":"stop","requestId":"req_2"}
+[2026-08-06T09:07:46.262Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_2\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:10:30.924Z] [host] stdin {"cmd":"stop","requestId":"req_3"}
+[2026-08-06T09:10:30.929Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_3\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:10:32.743Z] [host] stdin {"cmd":"stop","requestId":"req_4"}
+[2026-08-06T09:10:32.744Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_4\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:10:33.617Z] [host] stdin {"cmd":"stop","requestId":"req_5"}
+[2026-08-06T09:10:33.618Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_5\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:10:35.019Z] [host] stdin {"cmd":"stop","requestId":"req_6"}
+[2026-08-06T09:10:35.020Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_6\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:10:35.047Z] [host] stdin {"cmd":"stop","requestId":"req_7"}
+[2026-08-06T09:10:35.048Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_7\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:10:57.476Z] [host] stdin {"cmd":"stop","requestId":"req_8"}
+[2026-08-06T09:10:57.477Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_8\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:14:24.474Z] [host] stdin {"cmd":"stop","requestId":"req_9"}
+[2026-08-06T09:14:24.474Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_9\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:14:26.532Z] [host] stdin {"cmd":"stop","requestId":"req_10"}
+[2026-08-06T09:14:26.532Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_10\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:14:27.193Z] [host] stdin {"cmd":"stop","requestId":"req_11"}
+[2026-08-06T09:14:27.195Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_11\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:14:30.973Z] [host] stdin {"cmd":"stop","requestId":"req_12"}
+[2026-08-06T09:14:30.974Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_12\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:16:16.235Z] [host] stdin {"cmd":"stop","requestId":"req_13"}
+[2026-08-06T09:16:16.235Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_13\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:17:25.646Z] [host] stdin {"cmd":"stop","requestId":"req_14"}
+[2026-08-06T09:17:25.647Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_14\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:18:37.838Z] [host] stdin {"cmd":"stop","requestId":"req_15"}
+[2026-08-06T09:18:37.842Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_15\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:18:42.470Z] [host] stdin {"cmd":"stop","requestId":"req_16"}
+[2026-08-06T09:18:42.472Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_16\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:22:21.392Z] [host] stdin {"cmd":"stop","requestId":"req_17"}
+[2026-08-06T09:22:21.392Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_17\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:22:55.984Z] [host] stdin {"cmd":"stop","requestId":"req_18"}
+[2026-08-06T09:22:55.984Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_18\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:23:36.571Z] [host] stdin {"cmd":"stop","requestId":"req_19"}
+[2026-08-06T09:23:36.571Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_19\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:24:56.426Z] [host] stdin {"cmd":"stop","requestId":"req_20"}
+[2026-08-06T09:24:56.427Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_20\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:26:48.768Z] [host] stdin {"cmd":"stop","requestId":"req_21"}
+[2026-08-06T09:26:48.769Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_21\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:07.308Z] [host] stdin {"cmd":"stop","requestId":"req_22"}
+[2026-08-06T09:27:07.309Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_22\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:07.322Z] [host] stdin {"cmd":"stop","requestId":"req_23"}
+[2026-08-06T09:27:07.323Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_23\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:08.473Z] [host] stdin {"cmd":"stop","requestId":"req_24"}
+[2026-08-06T09:27:08.474Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_24\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:09.445Z] [host] stdin {"cmd":"stop","requestId":"req_25"}
+[2026-08-06T09:27:09.445Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_25\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:09.992Z] [host] stdin {"cmd":"stop","requestId":"req_26"}
+[2026-08-06T09:27:09.994Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_26\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:10.695Z] [host] stdin {"cmd":"stop","requestId":"req_27"}
+[2026-08-06T09:27:10.696Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_27\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:15.124Z] [host] stdin {"cmd":"stop","requestId":"req_28"}
+[2026-08-06T09:27:15.125Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_28\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:15.917Z] [host] stdin {"cmd":"stop","requestId":"req_29"}
+[2026-08-06T09:27:15.918Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_29\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:30.003Z] [host] stdin {"cmd":"stop","requestId":"req_30"}
+[2026-08-06T09:27:30.003Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_30\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:27:48.961Z] [host] stdin {"cmd":"stop","requestId":"req_31"}
+[2026-08-06T09:27:48.961Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_31\",\"ok\":true,\"decoding\":false}"}
+[2026-08-06T09:30:13.175Z] [host] stdin {"cmd":"stop","requestId":"req_32"}
+[2026-08-06T09:30:13.176Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"stop\",\"requestId\":\"req_32\",\"ok\":true,\"decoding\":false}"}
