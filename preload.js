@@ -60,31 +60,42 @@ contextBridge.exposeInMainWorld('electron', {
   getSerialPorts: async () => {
     return ipcRenderer.invoke('get-serial-ports');
   },
-  // TX 扫码摄像头 SDK（USB FData）
+  // TX 扫码 SDK：查询桥接状态（DLL / initialized / decoding / connected）
   getTxScannerStatus: async () => {
     return ipcRenderer.invoke('tx-scanner-get-status');
   },
+  // TX 扫码 SDK：初始化并启动解码（可传 triggerMode、saveTriggerMode）
   startTxScanner: async (options) => {
     return ipcRenderer.invoke('tx-scanner-start', options ?? {});
   },
+  // TX 扫码 SDK：停止解码（保留 init，可再次 start）
   stopTxScanner: async () => {
     return ipcRenderer.invoke('tx-scanner-stop');
   },
+  // TX 扫码 SDK：完整释放 SDK 与 koffi 回调
   deinitTxScanner: async () => {
     return ipcRenderer.invoke('tx-scanner-deinit');
   },
+  // TX 扫码 SDK：订阅扫码结果（主进程 push），返回取消订阅函数
   onTxScannerDecode: (callback) => {
+    // Step ①：校验 callback 为函数
     if (typeof callback !== 'function') return () => {};
     const channel = 'tx-scanner-decode';
     const listener = (_event, payload) => callback(payload);
+    // Step ②：注册 ipcRenderer 监听
     ipcRenderer.on(channel, listener);
+    // Step ③：返回 removeListener 供组件卸载时取消订阅
     return () => ipcRenderer.removeListener(channel, listener);
   },
+  // TX 扫码 SDK：订阅 USB 连接/断开状态，返回取消订阅函数
   onTxScannerCommState: (callback) => {
+    // Step ①：校验 callback 为函数
     if (typeof callback !== 'function') return () => {};
     const channel = 'tx-scanner-comm-state';
     const listener = (_event, payload) => callback(payload);
+    // Step ②：注册 ipcRenderer 监听
     ipcRenderer.on(channel, listener);
+    // Step ③：返回 removeListener 供组件卸载时取消订阅
     return () => ipcRenderer.removeListener(channel, listener);
   },
   // 获取是否是全屏

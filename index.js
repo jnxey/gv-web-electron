@@ -13,6 +13,7 @@ const {
   verifyPrintJobOnConfiguredPort,
   isPrinterPortAllowed
 } = require('./autoreplyprint-bridge');
+/** TX 扫码摄像头 SDK（USB FData）桥接：koffi + tx_windows_fdata.dll */
 const {
   getTxScannerStatus,
   startTxScanner,
@@ -451,24 +452,30 @@ function initIPC(mainWindow) {
     return verifyPrintJobOnConfiguredPort(localConfig);
   });
 
-  // TX 扫码摄像头 SDK（USB FData）
+  // TX 扫码摄像头 SDK（USB FData）：查询 DLL/initialized/decoding/connected 状态快照
   ipcMain.handle('tx-scanner-get-status', async () => {
     return getTxScannerStatus();
   });
 
+  // TX 扫码摄像头 SDK：合并 options 与 config.tx_scanner_trigger_mode 后启动解码
   ipcMain.handle('tx-scanner-start', async (event, options) => {
+    // Step ①：读取本地 config.json
     const localConfig = tools.getConfig();
+    // Step ②：triggerMode 优先用调用方传入，其次 config 默认值
     const triggerMode = options?.triggerMode ?? localConfig?.tx_scanner_trigger_mode;
+    // Step ③：委托 bridge 完成 register → init → decode_start
     return startTxScanner({
       triggerMode,
       saveTriggerMode: options?.saveTriggerMode
     });
   });
 
+  // TX 扫码摄像头 SDK：停止解码（保留 init，可再次 start）
   ipcMain.handle('tx-scanner-stop', async () => {
     return stopTxScanner();
   });
 
+  // TX 扫码摄像头 SDK：完整释放（stop → deinit → unregister 回调）
   ipcMain.handle('tx-scanner-deinit', async () => {
     return deinitTxScanner();
   });
@@ -757,6 +764,7 @@ app.on('before-quit', (event) => {
     .flushStore()
     .catch((err) => console.error('Failed to flush cookies on quit:', err))
     .finally(() => {
+      // 应用退出前释放 TX 扫码 SDK 与 koffi 回调槽，避免 native 回调泄漏
       try {
         deinitTxScanner();
       } catch (err) {
