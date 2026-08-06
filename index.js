@@ -13,6 +13,12 @@ const {
   verifyPrintJobOnConfiguredPort,
   isPrinterPortAllowed
 } = require('./autoreplyprint-bridge');
+const {
+  getTxScannerStatus,
+  startTxScanner,
+  stopTxScanner,
+  deinitTxScanner
+} = require('./tx-scanner-bridge');
 const { SerialPort } = require('serialport');
 
 const execFileAsync = promisify(execFile);
@@ -445,6 +451,28 @@ function initIPC(mainWindow) {
     return verifyPrintJobOnConfiguredPort(localConfig);
   });
 
+  // TX 扫码摄像头 SDK（USB FData）
+  ipcMain.handle('tx-scanner-get-status', async () => {
+    return getTxScannerStatus();
+  });
+
+  ipcMain.handle('tx-scanner-start', async (event, options) => {
+    const localConfig = tools.getConfig();
+    const triggerMode = options?.triggerMode ?? localConfig?.tx_scanner_trigger_mode;
+    return startTxScanner({
+      triggerMode,
+      saveTriggerMode: options?.saveTriggerMode
+    });
+  });
+
+  ipcMain.handle('tx-scanner-stop', async () => {
+    return stopTxScanner();
+  });
+
+  ipcMain.handle('tx-scanner-deinit', async () => {
+    return deinitTxScanner();
+  });
+
   // 获取本机串口列表（SerialPort.list，legacy）
   ipcMain.handle('get-serial-ports', async () => {
     try {
@@ -729,6 +757,11 @@ app.on('before-quit', (event) => {
     .flushStore()
     .catch((err) => console.error('Failed to flush cookies on quit:', err))
     .finally(() => {
+      try {
+        deinitTxScanner();
+      } catch (err) {
+        console.error('[electron] tx-scanner deinit on quit failed:', err);
+      }
       if (nodeProcess.serial) nodeProcess.serial.kill();
       if (nodeProcess.socket) nodeProcess.socket.kill();
       globalShortcut.unregisterAll();

@@ -60,6 +60,33 @@ contextBridge.exposeInMainWorld('electron', {
   getSerialPorts: async () => {
     return ipcRenderer.invoke('get-serial-ports');
   },
+  // TX 扫码摄像头 SDK（USB FData）
+  getTxScannerStatus: async () => {
+    return ipcRenderer.invoke('tx-scanner-get-status');
+  },
+  startTxScanner: async (options) => {
+    return ipcRenderer.invoke('tx-scanner-start', options ?? {});
+  },
+  stopTxScanner: async () => {
+    return ipcRenderer.invoke('tx-scanner-stop');
+  },
+  deinitTxScanner: async () => {
+    return ipcRenderer.invoke('tx-scanner-deinit');
+  },
+  onTxScannerDecode: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const channel = 'tx-scanner-decode';
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onTxScannerCommState: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const channel = 'tx-scanner-comm-state';
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   // 获取是否是全屏
   getFullscreen: async () => {
     return ipcRenderer.invoke('get-fullscreen');
