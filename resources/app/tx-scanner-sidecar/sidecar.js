@@ -113,7 +113,8 @@ function ensureLibLoaded() {
       tx_scanner_decode_start: lib.func('tx_scanner_decode_start', 'int', []),
       tx_scanner_decode_stop: lib.func('tx_scanner_decode_stop', 'int', []),
       tx_scanner_set_trigger_mode: lib.func('tx_scanner_set_trigger_mode', 'int', ['uint8', 'uint8']),
-      tx_scanner_get_trigger_mode: lib.func('tx_scanner_get_trigger_mode', 'int', [])
+      tx_scanner_get_trigger_mode: lib.func('tx_scanner_get_trigger_mode', 'int', []),
+      tx_scanner_get_version_info: lib.func('tx_scanner_get_version_info', 'int', ['uint8 *', 'uint16'])
     };
     return true;
   } catch (err) {
@@ -138,9 +139,63 @@ function readSdkVersion() {
 }
 
 /**
- * @param {{ triggerMode?: number, saveTriggerMode?: boolean }} [options]
+ * @param {number} ms
+ * @returns {Promise<void>}
  */
-function handleStart(options = {}) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 探测 USB 扫码设备是否可用（comm 回调或 get_version_info）。
+ *
+ * @returns {{ ready: boolean, reason: string, deviceInfo?: string }}
+ */
+function probeDeviceReady() {
+  if (connected === 1) return { ready: true, reason: 'comm' };
+  if (connected === 0) return { ready: false, reason: 'disconnected' };
+  if (!lib || !initialized) return { ready: false, reason: 'not_initialized' };
+
+  try {
+    const buffer = Buffer.alloc(128);
+    const ret = fns.tx_scanner_get_version_info(buffer, buffer.length);
+    if (ret >= SUCC) {
+      connected = 1;
+      emit({ type: 'comm', connected: true });
+      return {
+        ready: true,
+        reason: 'version_info',
+        deviceInfo: buffer.toString('utf8', 0, ret).replace(/\0.*$/, '')
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return { ready: false, reason: 'unknown' };
+}
+
+/**
+ * @param {number} timeoutMs
+ * @returns {Promise<{ ready: boolean, reason: string, deviceInfo?: string }>}
+ */
+async function waitForDeviceReady(timeoutMs) {
+  const first = probeDeviceReady();
+  if (first.ready) return first;
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(200);
+    const probe = probeDeviceReady();
+    if (probe.ready) return probe;
+  }
+  return probeDeviceReady();
+}
+
+/**
+ * @param {{ triggerMode?: number, saveTriggerMode?: boolean, applyTriggerMode?: boolean, waitForDevice?: boolean, deviceWaitTimeoutMs?: number, requestId?: string }} [options]
+ */
+async function handleStart(options = {}) {
   const requestId = options.requestId;
   if (!ensureLibLoaded()) {
     emit({
@@ -153,6 +208,7 @@ function handleStart(options = {}) {
     return;
   }
 
+  const applyTriggerMode = options.applyTriggerMode === true;
   const triggerMode = Number(options.triggerMode);
   const resolvedTriggerMode =
     Number.isFinite(triggerMode) && triggerMode >= 0 && triggerMode <= 3 ? triggerMode : TRIGGER_MODE_AUTOSENS;
@@ -183,19 +239,53 @@ function handleStart(options = {}) {
       initialized = true;
     }
 
-    const modeRet = fns.tx_scanner_set_trigger_mode(resolvedTriggerMode, saveTriggerMode);
-    if (modeRet < SUCC) {
-      emit({ type: 'result', cmd: 'start', requestId, ok: false, error: 'SET_TRIGGER_MODE_FAILED', detail: modeRet });
-      return;
+    const waitForDevice = options.waitForDevice !== false;
+    if (waitForDevice) {
+      const timeoutMs = Number(options.deviceWaitTimeoutMs);
+      const deviceProbe = await waitForDeviceReady(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 12000);
+      if (!deviceProbe.ready) {
+        emit({
+          type: 'result',
+          cmd: 'start',
+          requestId,
+          ok: false,
+          error: 'DEVICE_NOT_CONNECTED',
+          connected: connected === null ? null : connected === 1,
+          detail: -1,
+          deviceProbeReason: deviceProbe.reason
+        });
+        return;
+      }
     }
 
     if (!decoding) {
       const startRet = fns.tx_scanner_decode_start();
       if (startRet < SUCC) {
-        emit({ type: 'result', cmd: 'start', requestId, ok: false, error: 'DECODE_START_FAILED', detail: startRet });
+        emit({
+          type: 'result',
+          cmd: 'start',
+          requestId,
+          ok: false,
+          error: connected === 1 ? 'DECODE_START_FAILED' : 'DEVICE_NOT_CONNECTED',
+          connected: connected === null ? null : connected === 1,
+          detail: startRet
+        });
         return;
       }
       decoding = true;
+    }
+
+    /** @type {Record<string, unknown> | null} */
+    let triggerModeWarning = null;
+    if (applyTriggerMode) {
+      const modeRet = fns.tx_scanner_set_trigger_mode(resolvedTriggerMode, saveTriggerMode);
+      if (modeRet < SUCC) {
+        triggerModeWarning = {
+          error: 'SET_TRIGGER_MODE_FAILED',
+          detail: modeRet,
+          triggerMode: resolvedTriggerMode
+        };
+      }
     }
 
     emit({
@@ -205,7 +295,9 @@ function handleStart(options = {}) {
       ok: true,
       initialized,
       decoding,
-      triggerMode: resolvedTriggerMode,
+      triggerMode: applyTriggerMode ? resolvedTriggerMode : null,
+      triggerModeApplied: applyTriggerMode && triggerModeWarning === null,
+      triggerModeWarning,
       sdkVersion: readSdkVersion()
     });
   } catch (err) {
@@ -311,7 +403,16 @@ function handleCommand(msg) {
   const cmd = String(msg?.cmd ?? '');
   switch (cmd) {
     case 'start':
-      handleStart(msg);
+      handleStart(msg).catch((err) => {
+        emit({
+          type: 'result',
+          cmd: 'start',
+          requestId: msg?.requestId,
+          ok: false,
+          error: 'SDK_ERROR',
+          errorDetail: err instanceof Error ? err.message : String(err)
+        });
+      });
       break;
     case 'stop':
       handleStop(msg);

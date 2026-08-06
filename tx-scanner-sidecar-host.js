@@ -317,11 +317,17 @@ async function getSidecarTxScannerStatus() {
  */
 async function startSidecarTxScanner(options = {}) {
   try {
-    const result = await sendSidecarCommand({
-      cmd: 'start',
-      triggerMode: options.triggerMode,
-      saveTriggerMode: options.saveTriggerMode
-    });
+    const result = await sendSidecarCommand(
+      {
+        cmd: 'start',
+        triggerMode: options.triggerMode,
+        saveTriggerMode: options.saveTriggerMode,
+        applyTriggerMode: options.applyTriggerMode,
+        waitForDevice: options.waitForDevice,
+        deviceWaitTimeoutMs: options.deviceWaitTimeoutMs
+      },
+      30000
+    );
     return { ...result, bridgeMode: 'sidecar' };
   } catch (err) {
     return {

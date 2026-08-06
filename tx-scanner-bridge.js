@@ -384,6 +384,58 @@ function readSdkVersion() {
 }
 
 /**
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * @returns {{ ready: boolean, reason: string, deviceInfo?: string }}
+ */
+function probeDeviceReady() {
+  if (connected === 1) return { ready: true, reason: 'comm' };
+  if (connected === 0) return { ready: false, reason: 'disconnected' };
+  if (!lib || !initialized) return { ready: false, reason: 'not_initialized' };
+
+  try {
+    const buffer = Buffer.alloc(128);
+    const ret = fns.tx_scanner_get_version_info(buffer, buffer.length);
+    if (ret >= SUCC) {
+      connected = 1;
+      broadcast('tx-scanner-comm-state', { connected: true });
+      return {
+        ready: true,
+        reason: 'version_info',
+        deviceInfo: buffer.toString('utf8', 0, ret).replace(/\0.*$/, '')
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return { ready: false, reason: 'unknown' };
+}
+
+/**
+ * @param {number} timeoutMs
+ * @returns {Promise<{ ready: boolean, reason: string, deviceInfo?: string }>}
+ */
+async function waitForDeviceReady(timeoutMs) {
+  const first = probeDeviceReady();
+  if (first.ready) return first;
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(200);
+    const probe = probeDeviceReady();
+    if (probe.ready) return probe;
+  }
+  return probeDeviceReady();
+}
+
+/**
  * 查询桥接层与设备当前状态快照，供 IPC tx-scanner-get-status 使用。
  *
  * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
@@ -431,12 +483,11 @@ function getTxScannerStatus() {
  * 初始化扫码 SDK 并启动解码。
  * 幂等：重复调用不会重复 init/register，仅确保处于 decoding 状态。
  *
- * @param {{ triggerMode?: number, saveTriggerMode?: boolean }} [options]
- *   triggerMode: 0~3，默认 TRIGGER_MODE_AUTOSENS(3)
- *   saveTriggerMode: true 时永久写入设备
- * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
+ * @param {{ triggerMode?: number, saveTriggerMode?: boolean, applyTriggerMode?: boolean }} [options]
+ *   applyTriggerMode: true 时才调用 set_trigger_mode（需设备已连接；失败不阻断 decode_start）
+ * @returns {Promise<Record<string, unknown>>}
  */
-function startTxScanner(options = {}) {
+async function startTxScanner(options = {}) {
   if (resolveBridgeMode() === 'sidecar') {
     return sidecarHost.startSidecarTxScanner(options);
   }
@@ -444,6 +495,8 @@ function startTxScanner(options = {}) {
   // Step ①：确保 DLL 已加载
   if (!ensureLibLoaded()) return sdkNotLoadedResult();
 
+  const applyTriggerMode = options.applyTriggerMode === true;
+  const waitForDevice = options.waitForDevice !== false;
   const triggerMode = Number(options.triggerMode);
   const resolvedTriggerMode =
     Number.isFinite(triggerMode) && triggerMode >= 0 && triggerMode <= 3 ? triggerMode : TRIGGER_MODE_AUTOSENS;
@@ -469,24 +522,55 @@ function startTxScanner(options = {}) {
       initialized = true;
     }
 
-    // Step ④：设置触发模式（如自动感应）
-    const modeRet = fns.tx_scanner_set_trigger_mode(resolvedTriggerMode, saveTriggerMode);
-    if (modeRet < SUCC) {
-      return { ok: false, error: 'SET_TRIGGER_MODE_FAILED', detail: modeRet, triggerMode: resolvedTriggerMode };
+    if (waitForDevice) {
+      const timeoutMs = Number(options.deviceWaitTimeoutMs);
+      const deviceProbe = await waitForDeviceReady(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 12000);
+      if (!deviceProbe.ready) {
+        return {
+          ok: false,
+          error: 'DEVICE_NOT_CONNECTED',
+          connected: connected === null ? null : connected === 1,
+          detail: -1,
+          deviceProbeReason: deviceProbe.reason
+        };
+      }
     }
 
-    // Step ⑤：启动解码（若尚未 decoding）
+    // Step ④：启动解码（与官方 Demo 一致，优先 decode_start）
     if (!decoding) {
       const startRet = fns.tx_scanner_decode_start();
-      if (startRet < SUCC) return { ok: false, error: 'DECODE_START_FAILED', detail: startRet };
+      if (startRet < SUCC) {
+        return {
+          ok: false,
+          error: connected === 1 ? 'DECODE_START_FAILED' : 'DEVICE_NOT_CONNECTED',
+          connected: connected === null ? null : connected === 1,
+          detail: startRet
+        };
+      }
       decoding = true;
+    }
+
+    // Step ⑤：可选设置触发模式（需设备已连接；失败仅警告，不阻断解码）
+    /** @type {Record<string, unknown> | null} */
+    let triggerModeWarning = null;
+    if (applyTriggerMode) {
+      const modeRet = fns.tx_scanner_set_trigger_mode(resolvedTriggerMode, saveTriggerMode);
+      if (modeRet < SUCC) {
+        triggerModeWarning = {
+          error: 'SET_TRIGGER_MODE_FAILED',
+          detail: modeRet,
+          triggerMode: resolvedTriggerMode
+        };
+      }
     }
 
     return {
       ok: true,
       initialized,
       decoding,
-      triggerMode: resolvedTriggerMode,
+      triggerMode: applyTriggerMode ? resolvedTriggerMode : null,
+      triggerModeApplied: applyTriggerMode && triggerModeWarning === null,
+      triggerModeWarning,
       sdkVersion: readSdkVersion()
     };
   } catch (err) {

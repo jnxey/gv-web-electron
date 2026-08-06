@@ -457,17 +457,15 @@ function initIPC(mainWindow) {
     return getTxScannerStatus();
   });
 
-  // TX 扫码摄像头 SDK：合并 options 与 config.tx_scanner_trigger_mode 后启动解码
+  // TX 扫码摄像头 SDK：启动解码（默认不改触发模式，与官方 Demo 一致）
   ipcMain.handle('tx-scanner-start', async (event, options) => {
-    // Step ①：读取本地 config.json
     const localConfig = tools.getConfig();
-    // Step ②：triggerMode 优先用调用方传入，其次 config 默认值
-    const triggerMode = options?.triggerMode ?? localConfig?.tx_scanner_trigger_mode;
-    // Step ③：委托 bridge 完成 register → init → decode_start
-    return startTxScanner({
-      triggerMode,
-      saveTriggerMode: options?.saveTriggerMode
-    });
+    const payload = { saveTriggerMode: options?.saveTriggerMode };
+    if (options?.applyTriggerMode === true) {
+      payload.applyTriggerMode = true;
+      payload.triggerMode = options?.triggerMode ?? localConfig?.tx_scanner_trigger_mode ?? 3;
+    }
+    return startTxScanner(payload);
   });
 
   // TX 扫码摄像头 SDK：停止解码（保留 init，可再次 start）
