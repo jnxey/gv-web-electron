@@ -21,7 +21,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow } = require('electron');
 const sidecarHost = require('./tx-scanner-sidecar-host');
-const { getTxScannerUsbHostDiagnose } = require('./tx-scanner-usb-check');
+const { getTxScannerUsbHostDiagnoseAsync } = require('./tx-scanner-usb-check');
 
 /** PE Machine：Intel 386+（32 位） */
 const IMAGE_FILE_MACHINE_I386 = 0x014c;
@@ -439,21 +439,31 @@ async function waitForDeviceReady(timeoutMs) {
 /**
  * 查询桥接层与设备当前状态快照，供 IPC tx-scanner-get-status 使用。
  *
- * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
+ * @param {{ quick?: boolean, forceUsbRefresh?: boolean }} [options]
+ * @returns {Promise<Record<string, unknown>>}
  */
-function getTxScannerStatus() {
+async function getTxScannerStatus(options = {}) {
   const probe = probeTxScannerDll();
 
   if (resolveBridgeMode() === 'sidecar') {
-    return sidecarHost.getSidecarTxScannerStatus().then((status) => ({
+    const status = await sidecarHost.getSidecarTxScannerStatus(options);
+    return {
       ...probe,
       ...status,
       bridgeMode: 'sidecar'
-    }));
+    };
   }
 
   // Step ①：DLL 未加载时返回错误分支
   if (!ensureLibLoaded()) {
+    let usbHostDiagnose = null;
+    try {
+      usbHostDiagnose = await getTxScannerUsbHostDiagnoseAsync({
+        force: options.forceUsbRefresh === true
+      });
+    } catch (err) {
+      usbHostDiagnose = { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
     return {
       ok: false,
       sdkLoaded: false,
@@ -462,6 +472,7 @@ function getTxScannerStatus() {
       connected,
       error: loadErrorCode ?? 'SDK_NOT_LOADED',
       errorDetail: loadError ?? 'tx_windows_fdata.dll not available',
+      usbHostDiagnose,
       ...probe
     };
   }
@@ -469,7 +480,9 @@ function getTxScannerStatus() {
   // Step ②：组装完整状态快照（含 USB 主机诊断，供 HID/FData 自动分流）
   let usbHostDiagnose = null;
   try {
-    usbHostDiagnose = getTxScannerUsbHostDiagnose();
+    usbHostDiagnose = await getTxScannerUsbHostDiagnoseAsync({
+      force: options.forceUsbRefresh === true
+    });
   } catch (err) {
     usbHostDiagnose = { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

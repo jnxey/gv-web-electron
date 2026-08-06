@@ -20,6 +20,7 @@ const {
   stopTxScanner,
   deinitTxScanner
 } = require('./tx-scanner-bridge');
+const { getTxScannerUsbHostDiagnoseAsync } = require('./tx-scanner-usb-check');
 const { SerialPort } = require('serialport');
 
 const execFileAsync = promisify(execFile);
@@ -453,8 +454,8 @@ function initIPC(mainWindow) {
   });
 
   // TX 扫码摄像头 SDK（USB FData）：查询 DLL/initialized/decoding/connected 状态快照
-  ipcMain.handle('tx-scanner-get-status', async () => {
-    return getTxScannerStatus();
+  ipcMain.handle('tx-scanner-get-status', async (_event, options) => {
+    return getTxScannerStatus(options ?? {});
   });
 
   // TX 扫码摄像头 SDK：启动解码（默认不改触发模式，与官方 Demo 一致）
@@ -732,6 +733,8 @@ if (!gotTheLock) {
     setupSessionCookiePersistence();
     setupLocalServiceCorsHeaders();
     createWindow();
+
+    void getTxScannerUsbHostDiagnoseAsync().catch(() => {});
 
     app.on('activate', () => {
       // 在 macOS 系统内, 如果没有已开启的应用窗口

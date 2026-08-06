@@ -1,60 +1,58 @@
 /**
  * 主机侧 USB 诊断：判断扫码枪是否以 FData USB 枚举（非 HID 键盘模式）。
  */
-const { execFileSync } = require('node:child_process');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+
+const execFileAsync = promisify(execFile);
 
 /**
  * @typedef {{ instanceId: string, className: string, friendlyName: string, service: string, busDesc: string, hardwareIds: string[] }} UsbDeviceRow
  */
 
+/** @type {{ result: Record<string, unknown>, expiresAt: number } | null} */
+let usbDiagnoseCache = null;
+/** @type {Promise<Record<string, unknown>> | null} */
+let usbDiagnoseInflight = null;
+
+const USB_DIAGNOSE_CACHE_MS = 60000;
+
 /**
- * @param {string} script
- * @returns {string}
+ * 单次 PowerShell：CIM 按 VID_9901 过滤（避免 Get-PnpDevice 全量枚举）+ 冲突进程。
+ *
+ * @returns {Promise<string>}
  */
-function runPowerShellJson(script) {
+async function runPowerShellJsonAsync(script) {
   const wrapped = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${script}`;
-  const out = execFileSync(
+  const { stdout } = await execFileAsync(
     'powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', wrapped],
-    { encoding: 'utf8', timeout: 15000, windowsHide: true }
+    { encoding: 'utf8', timeout: 12000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }
   );
-  return out.trim();
+  return String(stdout ?? '').trim();
 }
 
 /**
- * 查询可能与 TX 扫码枪相关的 PnP 设备。
- *
- * @returns {UsbDeviceRow[]}
+ * @returns {Promise<UsbDeviceRow[]>}
  */
-function queryScannerRelatedDevices() {
+async function queryScannerRelatedDevicesAsync() {
   const script = `
-$rows = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
-  Where-Object {
-    $_.InstanceId -match 'VID_9901|VID_0C2E|VID_0525|VID_1EAB|VID_05F9|SCAN|BARCODE|FDATA' -or
-    $_.FriendlyName -match 'scan|barcode|fdata|tx'
-  } |
+$rows = Get-CimInstance Win32_PnPEntity -Filter "PNPDeviceID LIKE '%VID_9901%'" -ErrorAction SilentlyContinue |
   ForEach-Object {
-    $inst = $_.InstanceId
-    $svc = ''
-    $bus = ''
-    try { $svc = (Get-PnpDeviceProperty -InstanceId $inst -KeyName 'DEVPKEY_Device_Service' -ErrorAction SilentlyContinue).Data } catch {}
-    try { $bus = (Get-PnpDeviceProperty -InstanceId $inst -KeyName 'DEVPKEY_Device_BusReportedDeviceDesc' -ErrorAction SilentlyContinue).Data } catch {}
-    $hw = @()
-    try { $hw = @((Get-PnpDeviceProperty -InstanceId $inst -KeyName 'DEVPKEY_Device_HardwareIds' -ErrorAction SilentlyContinue).Data) } catch {}
     [PSCustomObject]@{
-      instanceId = $inst
-      className = $_.Class
-      friendlyName = $_.FriendlyName
-      status = $_.Status
-      service = [string]$svc
-      busDesc = [string]$bus
-      hardwareIds = ,@($hw | ForEach-Object { [string]$_ })
+      instanceId = [string]$_.PNPDeviceID
+      className = [string]$_.PNPClass
+      friendlyName = [string]$_.Name
+      status = 'OK'
+      service = [string]$_.Service
+      busDesc = [string]$_.Name
+      hardwareIds = ,@([string]$_.PNPDeviceID)
     }
   }
 $rows | ConvertTo-Json -Compress -Depth 4
 `;
   try {
-    const raw = runPowerShellJson(script);
+    const raw = await runPowerShellJsonAsync(script);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed;
@@ -115,33 +113,17 @@ function analyzeUsbMode(devices) {
   };
 }
 
-/** @type {{ result: Record<string, unknown>, expiresAt: number } | null} */
-let usbDiagnoseCache = null;
-const USB_DIAGNOSE_CACHE_MS = 3000;
-
 /**
- * @returns {Record<string, unknown>}
+ * @returns {Promise<Record<string, unknown>>}
  */
-function getTxScannerUsbHostDiagnose() {
-  const now = Date.now();
-  if (usbDiagnoseCache && usbDiagnoseCache.expiresAt > now) {
-    return usbDiagnoseCache.result;
-  }
-  const result = buildTxScannerUsbHostDiagnose();
-  usbDiagnoseCache = { result, expiresAt: now + USB_DIAGNOSE_CACHE_MS };
-  return result;
-}
-
-/**
- * @returns {Record<string, unknown>}
- */
-function buildTxScannerUsbHostDiagnose() {
-  const devices = queryScannerRelatedDevices();
+async function buildTxScannerUsbHostDiagnoseAsync() {
+  const devices = await queryScannerRelatedDevicesAsync();
   const analysis = analyzeUsbMode(devices);
   const conflicts = [];
+
   try {
-    const ps = runPowerShellJson(
-      `Get-Process native-sidecar,tx_windows_fdata -ErrorAction SilentlyContinue | Select-Object Name,Id | ConvertTo-Json -Compress`
+    const ps = await runPowerShellJsonAsync(
+      `Get-Process native-sidecar -ErrorAction SilentlyContinue | Select-Object Name,Id | ConvertTo-Json -Compress`
     );
     if (ps) {
       const proc = JSON.parse(ps);
@@ -160,8 +142,63 @@ function buildTxScannerUsbHostDiagnose() {
   };
 }
 
+/**
+ * @param {{ force?: boolean }} [options]
+ * @returns {Promise<Record<string, unknown>>}
+ */
+async function getTxScannerUsbHostDiagnoseAsync(options = {}) {
+  const now = Date.now();
+  if (!options.force && usbDiagnoseCache && usbDiagnoseCache.expiresAt > now) {
+    return usbDiagnoseCache.result;
+  }
+  if (usbDiagnoseInflight) {
+    return usbDiagnoseInflight;
+  }
+
+  usbDiagnoseInflight = buildTxScannerUsbHostDiagnoseAsync()
+    .then((result) => {
+      usbDiagnoseCache = { result, expiresAt: Date.now() + USB_DIAGNOSE_CACHE_MS };
+      return result;
+    })
+    .finally(() => {
+      usbDiagnoseInflight = null;
+    });
+
+  return usbDiagnoseInflight;
+}
+
+/**
+ * 同步读取缓存（无缓存时返回 null）。status 快速路径用。
+ *
+ * @returns {Record<string, unknown> | null}
+ */
+function getTxScannerUsbHostDiagnoseCachedSync() {
+  if (usbDiagnoseCache && usbDiagnoseCache.expiresAt > Date.now()) {
+    return usbDiagnoseCache.result;
+  }
+  return null;
+}
+
+/**
+ * @deprecated 优先使用 getTxScannerUsbHostDiagnoseAsync；同步版仅作兜底。
+ * @returns {Record<string, unknown>}
+ */
+function getTxScannerUsbHostDiagnose() {
+  const cached = getTxScannerUsbHostDiagnoseCachedSync();
+  if (cached) return cached;
+  return {
+    ok: false,
+    mode: 'unknown',
+    summary: 'USB 诊断尚未完成',
+    recommendation: '请稍后刷新状态',
+    stale: true
+  };
+}
+
 module.exports = {
   getTxScannerUsbHostDiagnose,
-  queryScannerRelatedDevices,
+  getTxScannerUsbHostDiagnoseAsync,
+  getTxScannerUsbHostDiagnoseCachedSync,
+  queryScannerRelatedDevices: queryScannerRelatedDevicesAsync,
   analyzeUsbMode
 };

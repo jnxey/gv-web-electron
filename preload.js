@@ -61,8 +61,8 @@ contextBridge.exposeInMainWorld('electron', {
     return ipcRenderer.invoke('get-serial-ports');
   },
   // TX 扫码 SDK：查询桥接状态（DLL / initialized / decoding / connected）
-  getTxScannerStatus: async () => {
-    return ipcRenderer.invoke('tx-scanner-get-status');
+  getTxScannerStatus: async (options) => {
+    return ipcRenderer.invoke('tx-scanner-get-status', options ?? {});
   },
   // TX 扫码 SDK：初始化并启动解码（可传 triggerMode、saveTriggerMode）
   startTxScanner: async (options) => {

@@ -11,7 +11,7 @@ const {
   appendTxScannerSidecarLog,
   readTxScannerSidecarLogTail
 } = require('./tx-scanner-sidecar-log');
-const { getTxScannerUsbHostDiagnose } = require('./tx-scanner-usb-check');
+const { getTxScannerUsbHostDiagnoseAsync } = require('./tx-scanner-usb-check');
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let sidecarProcess = null;
@@ -399,35 +399,46 @@ function shouldLogSidecarStdout(msg) {
 }
 
 /**
+ * @param {{ quick?: boolean, forceUsbRefresh?: boolean, includeSidecarLog?: boolean }} [options]
  * @returns {Promise<Record<string, unknown>>}
  */
-async function getSidecarTxScannerStatus() {
+async function getSidecarTxScannerStatus(options = {}) {
+  const quick = options.quick !== false;
   const runtime = probeSidecarRuntime();
-  const logPath = resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar());
+  const libDir = resolveTxScannerLibDirForSidecar();
+  const dllPath = path.join(libDir, 'tx_windows_fdata.dll');
+
   let usbHostDiagnose = null;
   try {
-    usbHostDiagnose = getTxScannerUsbHostDiagnose();
+    usbHostDiagnose = await getTxScannerUsbHostDiagnoseAsync({
+      force: options.forceUsbRefresh === true
+    });
   } catch (err) {
     usbHostDiagnose = {
       ok: false,
       error: err instanceof Error ? err.message : String(err)
     };
   }
+
   const base = {
     bridgeMode: 'sidecar',
     sidecarKind: runtime.mode,
     sidecarProcessArch: 'ia32',
     processArch: process.arch,
-    dllPath: path.join(resolveTxScannerLibDirForSidecar(), 'tx_windows_fdata.dll'),
-    libDir: resolveTxScannerLibDirForSidecar(),
-    dllExists: fs.existsSync(path.join(resolveTxScannerLibDirForSidecar(), 'tx_windows_fdata.dll')),
+    dllPath,
+    libDir,
+    dllExists: fs.existsSync(dllPath),
     nativeSidecarExe: runtime.nativeSidecarExe,
     nativeExists: runtime.nativeExists,
-    sidecarLogPath: logPath,
-    sidecarLogTail: readTxScannerSidecarLogTail(logPath, 40),
     usbHostDiagnose,
     ...runtime
   };
+
+  if (options.includeSidecarLog === true) {
+    const logPath = resolveTxScannerSidecarLogPath(() => libDir);
+    base.sidecarLogPath = logPath;
+    base.sidecarLogTail = readTxScannerSidecarLogTail(logPath, 40);
+  }
 
   if (usbHostDiagnose?.mode === 'hid_keyboard') {
     return {
@@ -438,6 +449,7 @@ async function getSidecarTxScannerStatus() {
       decoding: false,
       connected: true,
       scannerMode: 'hid_keyboard',
+      sidecarRunning: false,
       ...base
     };
   }
@@ -448,6 +460,7 @@ async function getSidecarTxScannerStatus() {
       sdkLoaded: false,
       error: 'SIDECAR_NATIVE_NOT_FOUND',
       errorDetail: runtime.nativeSidecarExe,
+      sidecarRunning: false,
       ...base
     };
   }
@@ -458,6 +471,55 @@ async function getSidecarTxScannerStatus() {
       sdkLoaded: false,
       error: 'SIDECAR_NODE_NOT_FOUND',
       errorDetail: runtime.nodeX86Path,
+      sidecarRunning: false,
+      ...base
+    };
+  }
+
+  const sidecarAlive =
+    sidecarProcess && sidecarReady && sidecarProcess.stdin && !sidecarProcess.killed;
+
+  if (sidecarAlive) {
+    try {
+      const result = await sendSidecarCommand({ cmd: 'status' }, 5000);
+      return {
+        ok: result.ok === true,
+        sdkLoaded: result.sdkLoaded === true,
+        initialized: result.initialized === true,
+        decoding: result.decoding === true,
+        connected: result.connected ?? sidecarConnected,
+        sdkVersion: result.sdkVersion ?? sidecarSdkVersion,
+        sidecarRunning: true,
+        ...base
+      };
+    } catch (err) {
+      if (!quick) {
+        return {
+          ok: false,
+          sdkLoaded: false,
+          error: sidecarBootErrorCode ?? 'SIDECAR_ERROR',
+          errorDetail: sidecarBootError ?? (err instanceof Error ? err.message : String(err)),
+          sidecarRunning: false,
+          ...base
+        };
+      }
+    }
+  }
+
+  if (quick) {
+    return {
+      ok: base.dllExists && (runtime.nativeExists || runtime.nodeExists),
+      sdkLoaded: base.dllExists && (runtime.nativeExists || runtime.nodeExists),
+      initialized: sidecarInitialized,
+      decoding: sidecarDecoding,
+      connected:
+        usbHostDiagnose?.mode === 'fdata_usb'
+          ? sidecarConnected
+          : usbHostDiagnose?.mode === 'not_found'
+            ? false
+            : null,
+      sdkVersion: sidecarSdkVersion || '',
+      sidecarRunning: false,
       ...base
     };
   }
@@ -472,7 +534,7 @@ async function getSidecarTxScannerStatus() {
       decoding: result.decoding === true,
       connected: result.connected ?? sidecarConnected,
       sdkVersion: result.sdkVersion ?? sidecarSdkVersion,
-      sidecarLogTail: readTxScannerSidecarLogTail(logPath, 60),
+      sidecarRunning: true,
       ...base
     };
   } catch (err) {
@@ -481,6 +543,7 @@ async function getSidecarTxScannerStatus() {
       sdkLoaded: false,
       error: sidecarBootErrorCode ?? 'SIDECAR_ERROR',
       errorDetail: sidecarBootError ?? (err instanceof Error ? err.message : String(err)),
+      sidecarRunning: false,
       ...base
     };
   }
@@ -491,7 +554,9 @@ async function getSidecarTxScannerStatus() {
  * @returns {Promise<Record<string, unknown>>}
  */
 async function startSidecarTxScanner(options = {}) {
-  const usbHostDiagnose = getTxScannerUsbHostDiagnose();
+  const usbHostDiagnose = await getTxScannerUsbHostDiagnoseAsync({
+    force: options.forceUsbRefresh === true
+  });
   if (usbHostDiagnose?.mode === 'hid_keyboard') {
     return {
       ok: false,
