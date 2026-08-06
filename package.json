@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "start": "electron ./index.js",
-    "build": "electron-builder --win --x64"
+    "build": "electron-builder --win --x64",
+    "setup:tx-scanner-sidecar": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-tx-scanner-sidecar.ps1"
   },
   "author": "",
   "license": "ISC",

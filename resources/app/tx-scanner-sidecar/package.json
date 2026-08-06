@@ -1,0 +1,10 @@
+{
+  "name": "tx-scanner-sidecar",
+  "private": true,
+  "version": "1.0.0",
+  "description": "32-bit Node sidecar for TX scanner SDK (ia32 DLL on x64 Electron)",
+  "dependencies": {
+    "game-xch": "file:../../..",
+    "koffi": "^2.16.3"
+  }
+}

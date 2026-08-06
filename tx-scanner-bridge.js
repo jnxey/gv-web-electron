@@ -20,8 +20,20 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow } = require('electron');
+const sidecarHost = require('./tx-scanner-sidecar-host');
 
-/** --- koffi / DLL 加载状态 --- */
+/** PE Machine：Intel 386+（32 位） */
+const IMAGE_FILE_MACHINE_I386 = 0x014c;
+/** PE Machine：AMD64（64 位） */
+const IMAGE_FILE_MACHINE_AMD64 = 0x8664;
+
+/** @type {'native' | 'sidecar' | null} 桥接模式：同进程 koffi 或 32 位侧车 */
+let bridgeMode = null;
+
+sidecarHost.configureSidecarForwarders({
+  onDecode: (payload) => broadcast('tx-scanner-decode', payload),
+  onCommState: (payload) => broadcast('tx-scanner-comm-state', payload)
+});
 
 /** @type {import('koffi') | null} koffi 模块实例，首次 ensureLibLoaded 时 require */
 let koffi = null;
@@ -92,17 +104,81 @@ function resolveTxScannerDllPath() {
 }
 
 /**
+ * 读取 PE 文件的 Machine 字段，判断 DLL 为 x86 或 x64。
+ *
+ * @param {string} filePath
+ * @returns {number | null}
+ */
+function readPeMachineType(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const dosHeader = Buffer.alloc(64);
+    fs.readSync(fd, dosHeader, 0, 64, 0);
+    const peOffset = dosHeader.readUInt32LE(0x3c);
+    const peSig = Buffer.alloc(4);
+    fs.readSync(fd, peSig, 0, 4, peOffset);
+    if (peSig.toString('ascii') !== 'PE\0\0') return null;
+    const machineBuf = Buffer.alloc(2);
+    fs.readSync(fd, machineBuf, 0, 2, peOffset + 4);
+    return machineBuf.readUInt16LE(0);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/**
+ * @param {number | null} machine
+ * @returns {'ia32' | 'x64' | 'unknown'}
+ */
+function peMachineToArch(machine) {
+  if (machine === IMAGE_FILE_MACHINE_I386) return 'ia32';
+  if (machine === IMAGE_FILE_MACHINE_AMD64) return 'x64';
+  return 'unknown';
+}
+
+/**
+ * 64 位 Electron + 32 位 SDK DLL 时走侧车；其余同架构走 native koffi。
+ *
+ * @returns {'native' | 'sidecar'}
+ */
+function resolveBridgeMode() {
+  if (bridgeMode) return bridgeMode;
+
+  const dllPath = resolveTxScannerDllPath();
+  if (!fs.existsSync(dllPath)) {
+    bridgeMode = 'native';
+    return bridgeMode;
+  }
+
+  const machine = readPeMachineType(dllPath);
+  if (process.arch === 'x64' && machine === IMAGE_FILE_MACHINE_I386) {
+    bridgeMode = 'sidecar';
+  } else {
+    bridgeMode = 'native';
+  }
+  return bridgeMode;
+}
+
+/**
  * 探测 DLL 文件是否存在及 Electron 进程架构。
  *
  * @returns {{ dllPath: string, libDir: string, dllExists: boolean, processArch: string }}
  */
 function probeTxScannerDll() {
   const dllPath = resolveTxScannerDllPath();
+  const machine = fs.existsSync(dllPath) ? readPeMachineType(dllPath) : null;
   return {
     dllPath,
     libDir: resolveTxScannerLibDir(),
     dllExists: fs.existsSync(dllPath),
-    processArch: process.arch
+    processArch: process.arch,
+    dllMachine: machine,
+    dllArch: peMachineToArch(machine),
+    bridgeMode: resolveBridgeMode()
   };
 }
 
@@ -228,7 +304,10 @@ function onCommState(state) {
  * @returns {boolean} DLL 是否可用
  */
 function ensureLibLoaded() {
-  // Step ①：已加载则短路
+  // Step ①：侧车模式不在主进程 load DLL
+  if (resolveBridgeMode() === 'sidecar') return false;
+
+  // Step ②：已加载则短路
   if (lib) return true;
 
   const probe = probeTxScannerDll();
@@ -307,10 +386,18 @@ function readSdkVersion() {
 /**
  * 查询桥接层与设备当前状态快照，供 IPC tx-scanner-get-status 使用。
  *
- * @returns {Record<string, unknown>} 含 sdkLoaded / initialized / decoding / connected / sdkVersion 等
+ * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
  */
 function getTxScannerStatus() {
   const probe = probeTxScannerDll();
+
+  if (resolveBridgeMode() === 'sidecar') {
+    return sidecarHost.getSidecarTxScannerStatus().then((status) => ({
+      ...probe,
+      ...status,
+      bridgeMode: 'sidecar'
+    }));
+  }
 
   // Step ①：DLL 未加载时返回错误分支
   if (!ensureLibLoaded()) {
@@ -335,6 +422,7 @@ function getTxScannerStatus() {
     connected: connected === null ? null : connected === 1,
     sdkVersion: readSdkVersion(),
     triggerMode: initialized ? fns.tx_scanner_get_trigger_mode() : null,
+    bridgeMode: 'native',
     ...probe
   };
 }
@@ -346,9 +434,13 @@ function getTxScannerStatus() {
  * @param {{ triggerMode?: number, saveTriggerMode?: boolean }} [options]
  *   triggerMode: 0~3，默认 TRIGGER_MODE_AUTOSENS(3)
  *   saveTriggerMode: true 时永久写入设备
- * @returns {Record<string, unknown>}
+ * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
  */
 function startTxScanner(options = {}) {
+  if (resolveBridgeMode() === 'sidecar') {
+    return sidecarHost.startSidecarTxScanner(options);
+  }
+
   // Step ①：确保 DLL 已加载
   if (!ensureLibLoaded()) return sdkNotLoadedResult();
 
@@ -407,9 +499,13 @@ function startTxScanner(options = {}) {
 /**
  * 停止解码（tx_scanner_decode_stop），保留 init 状态，可再次 startTxScanner。
  *
- * @returns {Record<string, unknown>}
+ * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
  */
 function stopTxScanner() {
+  if (resolveBridgeMode() === 'sidecar') {
+    return sidecarHost.stopSidecarTxScanner();
+  }
+
   // Step ①：未 init 或未加载时安全跳过
   if (!ensureLibLoaded() || !initialized) {
     return { ok: true, decoding: false, skipped: true };
@@ -434,9 +530,13 @@ function stopTxScanner() {
  * 完整释放 SDK：stop → deinit → unregister 回调。
  * 应用退出（before-quit）或页面明确释放时调用。
  *
- * @returns {Record<string, unknown>}
+ * @returns {Promise<Record<string, unknown>> | Record<string, unknown>}
  */
 function deinitTxScanner() {
+  if (resolveBridgeMode() === 'sidecar') {
+    return sidecarHost.deinitSidecarTxScanner();
+  }
+
   // Step ①：先停止解码
   stopTxScanner();
 
@@ -477,5 +577,7 @@ module.exports = {
   deinitTxScanner,
   resolveTxScannerDllPath,
   resolveTxScannerLibDir,
-  probeTxScannerDll
+  probeTxScannerDll,
+  resolveBridgeMode,
+  readPeMachineType
 };

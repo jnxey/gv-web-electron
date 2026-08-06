@@ -11,13 +11,15 @@ const { app } = require('electron');
 let sidecarProcess = null;
 /** @type {import('readline').Interface | null} */
 let sidecarReader = null;
+/** @type {Promise<void> | null} */
+let bootPromise = null;
 /** @type {Map<string, { resolve: Function, reject: Function, timer: NodeJS.Timeout }>} */
 const pendingCommands = new Map();
 /** @type {number} */
 let commandSeq = 0;
 /** @type {boolean} */
 let sidecarReady = false;
-/** @type {string | null} */
+/** @type {string} */
 let sidecarSdkVersion = '';
 /** @type {boolean} */
 let sidecarInitialized = false;
@@ -66,7 +68,7 @@ function resolveSidecarCwd() {
 /**
  * @returns {string}
  */
-function resolveTxScannerLibDir() {
+function resolveTxScannerLibDirForSidecar() {
   return path.join(resolveAppRoot(), 'lib');
 }
 
@@ -82,19 +84,6 @@ function probeSidecarRuntime() {
     nodeExists: fs.existsSync(nodeX86Path),
     scriptExists: fs.existsSync(sidecarScript)
   };
-}
-
-/**
- * @param {string} channel
- * @param {Record<string, unknown>} payload
- */
-function setForwarders(channel, payload) {
-  if (channel === 'tx-scanner-decode' && onDecodeForward) {
-    onDecodeForward(payload);
-  }
-  if (channel === 'tx-scanner-comm-state' && onCommForward) {
-    onCommForward(payload);
-  }
 }
 
 /**
@@ -114,7 +103,7 @@ function handleSidecarMessage(msg) {
   }
 
   if (type === 'decode') {
-    setForwarders('tx-scanner-decode', {
+    onDecodeForward?.({
       codeType: msg.codeType,
       data: msg.data,
       length: msg.length
@@ -124,13 +113,13 @@ function handleSidecarMessage(msg) {
 
   if (type === 'comm') {
     sidecarConnected = msg.connected === true;
-    setForwarders('tx-scanner-comm-state', { connected: msg.connected === true });
+    onCommForward?.({ connected: msg.connected === true });
     return;
   }
 
   if (type === 'result') {
     const requestId = msg?.requestId;
-    if (requestId && pendingCommands.has(requestId)) {
+    if (typeof requestId === 'string' && pendingCommands.has(requestId)) {
       const pending = pendingCommands.get(requestId);
       pendingCommands.delete(requestId);
       clearTimeout(pending.timer);
@@ -169,9 +158,8 @@ function handleSidecarMessage(msg) {
  * @returns {Promise<void>}
  */
 function ensureSidecarProcess() {
-  if (sidecarProcess && !sidecarProcess.killed) {
-    return sidecarReady ? Promise.resolve() : waitForSidecarReady();
-  }
+  if (sidecarProcess && sidecarReady) return Promise.resolve();
+  if (bootPromise) return bootPromise;
 
   const runtime = probeSidecarRuntime();
   if (!runtime.nodeExists || !runtime.scriptExists) {
@@ -180,26 +168,39 @@ function ensureSidecarProcess() {
     return Promise.reject(new Error('SIDECAR_NODE_NOT_FOUND'));
   }
 
-  sidecarReady = false;
-  sidecarBootError = null;
-  sidecarBootErrorCode = null;
+  bootPromise = new Promise((resolve, reject) => {
+    sidecarReady = false;
+    sidecarBootError = null;
+    sidecarBootErrorCode = null;
 
-  return new Promise((resolve, reject) => {
     sidecarProcess = spawn(runtime.nodeX86Path, [runtime.sidecarScript], {
       cwd: resolveSidecarCwd(),
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
       env: {
         ...process.env,
-        TX_SCANNER_DLL_DIR: resolveTxScannerLibDir()
+        TX_SCANNER_DLL_DIR: resolveTxScannerLibDirForSidecar()
       }
     });
+
+    const bootTimer = setTimeout(() => {
+      sidecarBootErrorCode = 'SIDECAR_BOOT_TIMEOUT';
+      sidecarBootError = 'sidecar ready timeout';
+      bootPromise = null;
+      reject(new Error('SIDECAR_BOOT_TIMEOUT'));
+    }, 15000);
 
     sidecarReader = readline.createInterface({ input: sidecarProcess.stdout });
     sidecarReader.on('line', (line) => {
       try {
-        handleSidecarMessage(JSON.parse(String(line)));
-        if (sidecarReady) resolve();
+        const msg = JSON.parse(String(line));
+        handleSidecarMessage(msg);
+        if (msg?.type === 'ready') {
+          clearTimeout(bootTimer);
+          bootPromise = null;
+          if (msg.ok === true) resolve();
+          else reject(new Error(sidecarBootErrorCode ?? 'SDK_NOT_LOADED'));
+        }
       } catch (err) {
         console.error('[tx-scanner-sidecar-host] parse line failed:', line, err);
       }
@@ -210,6 +211,8 @@ function ensureSidecarProcess() {
     });
 
     sidecarProcess.on('error', (err) => {
+      clearTimeout(bootTimer);
+      bootPromise = null;
       sidecarBootErrorCode = 'SIDECAR_SPAWN_FAILED';
       sidecarBootError = err.message;
       reject(err);
@@ -219,36 +222,12 @@ function ensureSidecarProcess() {
       sidecarReady = false;
       sidecarProcess = null;
       sidecarReader = null;
+      bootPromise = null;
       console.log('[tx-scanner-sidecar-host] exited', code);
     });
-
-    setTimeout(() => {
-      if (!sidecarReady) {
-        sidecarBootErrorCode = 'SIDECAR_BOOT_TIMEOUT';
-        sidecarBootError = 'sidecar ready timeout';
-        reject(new Error('SIDECAR_BOOT_TIMEOUT'));
-      }
-    }, 15000);
   });
-}
 
-/**
- * @returns {Promise<void>}
- */
-function waitForSidecarReady() {
-  if (sidecarReady) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timer = setInterval(() => {
-      if (sidecarReady) {
-        clearInterval(timer);
-        resolve();
-      }
-    }, 50);
-    setTimeout(() => {
-      clearInterval(timer);
-      reject(new Error('SIDECAR_BOOT_TIMEOUT'));
-    }, 15000);
-  });
+  return bootPromise;
 }
 
 /**
@@ -293,6 +272,9 @@ async function getSidecarTxScannerStatus() {
     bridgeMode: 'sidecar',
     sidecarProcessArch: 'ia32',
     processArch: process.arch,
+    dllPath: path.join(resolveTxScannerLibDirForSidecar(), 'tx_windows_fdata.dll'),
+    libDir: resolveTxScannerLibDirForSidecar(),
+    dllExists: fs.existsSync(path.join(resolveTxScannerLibDirForSidecar(), 'tx_windows_fdata.dll')),
     ...runtime
   };
 
@@ -378,6 +360,8 @@ async function deinitSidecarTxScanner() {
       sidecarProcess.kill();
       sidecarProcess = null;
       sidecarReader = null;
+      bootPromise = null;
+      sidecarReady = false;
     }
     return { ...result, bridgeMode: 'sidecar' };
   } catch (err) {

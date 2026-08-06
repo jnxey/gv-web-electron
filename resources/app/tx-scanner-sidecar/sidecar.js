@@ -250,7 +250,14 @@ function handleStop(options = {}) {
 
 function handleDeinit(options = {}) {
   const requestId = options.requestId;
-  handleStop({ requestId });
+  if (lib && initialized && decoding) {
+    try {
+      fns.tx_scanner_decode_stop();
+    } catch {
+      /* ignore */
+    }
+    decoding = false;
+  }
   if (!lib || !initialized) {
     emit({ type: 'result', cmd: 'deinit', requestId, ok: true, skipped: true });
     return;
@@ -307,13 +314,13 @@ function handleCommand(msg) {
       handleStart(msg);
       break;
     case 'stop':
-      handleStop();
+      handleStop(msg);
       break;
     case 'deinit':
-      handleDeinit();
+      handleDeinit(msg);
       break;
     case 'status':
-      handleStatus();
+      handleStatus(msg);
       break;
     case 'ping':
       emit({ type: 'result', cmd: 'ping', ok: true, processArch: process.arch });
