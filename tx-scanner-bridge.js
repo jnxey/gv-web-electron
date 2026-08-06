@@ -18,6 +18,7 @@
  * @see D:/Work/gv-web-electron/index.js ipcMain.handle('tx-scanner-*')
  */
 const path = require('node:path');
+const fs = require('node:fs');
 const { app, BrowserWindow } = require('electron');
 
 /** --- koffi / DLL 加载状态 --- */
@@ -28,6 +29,8 @@ let koffi = null;
 let lib = null;
 /** @type {string | null} DLL 加载失败时的错误信息，避免重复尝试 load */
 let loadError = null;
+/** @type {string | null} 结构化错误码：DLL_NOT_FOUND / DLL_ARCH_MISMATCH / DLL_DEPENDENCY_MISSING 等 */
+let loadErrorCode = null;
 
 /** --- SDK 运行时状态 --- */
 
@@ -67,18 +70,77 @@ let CommStateCb = null;
 let fns = {};
 
 /**
+ * 解析 SDK lib 目录（tx_windows_fdata.dll 与 msvcr100d.dll 等依赖需同目录）。
+ *
+ * @returns {string}
+ */
+function resolveTxScannerLibDir() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'app/lib');
+  }
+  return path.join(__dirname, 'resources/app/lib');
+}
+
+/**
  * 解析 tx_windows_fdata.dll 的绝对路径。
  * 开发态与打包态路径不同，与 autoreplyprint-bridge 保持一致。
  *
  * @returns {string} DLL 绝对路径
  */
 function resolveTxScannerDllPath() {
-  // Step ①：打包后 DLL 在 process.resourcesPath/app/lib
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'app/lib/tx_windows_fdata.dll');
+  return path.join(resolveTxScannerLibDir(), 'tx_windows_fdata.dll');
+}
+
+/**
+ * 探测 DLL 文件是否存在及 Electron 进程架构。
+ *
+ * @returns {{ dllPath: string, libDir: string, dllExists: boolean, processArch: string }}
+ */
+function probeTxScannerDll() {
+  const dllPath = resolveTxScannerDllPath();
+  return {
+    dllPath,
+    libDir: resolveTxScannerLibDir(),
+    dllExists: fs.existsSync(dllPath),
+    processArch: process.arch
+  };
+}
+
+/**
+ * 将 koffi.load 异常归类为可读错误码。
+ *
+ * @param {unknown} err
+ * @param {{ dllPath: string, dllExists: boolean, processArch: string }} probe
+ * @returns {{ error: string, errorDetail: string }}
+ */
+function classifyTxScannerLoadError(err, probe) {
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (!probe.dllExists) {
+    return {
+      error: 'DLL_NOT_FOUND',
+      errorDetail: probe.dllPath
+    };
   }
-  // Step ②：开发态相对 __dirname/resources/app/lib
-  return path.join(__dirname, 'resources/app/lib/tx_windows_fdata.dll');
+
+  if (/386|x86|32.?bit|AMD x64|different architecture/i.test(message)) {
+    return {
+      error: 'DLL_ARCH_MISMATCH',
+      errorDetail: `Electron=${probe.processArch}; SDK DLL must be 64-bit (x64) tx_windows_fdata.dll`
+    };
+  }
+
+  if (/找不到指定的模块|specified module|cannot find module|error 126/i.test(message)) {
+    return {
+      error: 'DLL_DEPENDENCY_MISSING',
+      errorDetail: message
+    };
+  }
+
+  return {
+    error: 'SDK_NOT_LOADED',
+    errorDetail: message
+  };
 }
 
 /**
@@ -168,12 +230,15 @@ function onCommState(state) {
 function ensureLibLoaded() {
   // Step ①：已加载则短路
   if (lib) return true;
-  if (loadError) return false;
+
+  const probe = probeTxScannerDll();
 
   try {
     // Step ②：加载 koffi 与 DLL
     koffi = require('koffi');
-    lib = koffi.load(resolveTxScannerDllPath());
+    lib = koffi.load(probe.dllPath);
+    loadError = null;
+    loadErrorCode = null;
 
     // Step ③：定义 C 回调函数原型（__cdecl 与 SDK extern "C" 一致）
     DecodeDataCb = koffi.proto('int __cdecl tx_scanner_decode_data_cb(uint8 codeType, uint8 *pBuf, uint32 uiBufLen)');
@@ -201,8 +266,11 @@ function ensureLibLoaded() {
 
     return true;
   } catch (err) {
-    loadError = err instanceof Error ? err.message : String(err);
-    console.error('[tx-scanner-bridge] load failed:', err);
+    const classified = classifyTxScannerLoadError(err, probe);
+    loadErrorCode = classified.error;
+    loadError = classified.errorDetail;
+    console.error('[tx-scanner-bridge] load failed:', classified.error, classified.errorDetail, probe);
+    lib = null;
     return false;
   }
 }
@@ -215,7 +283,7 @@ function ensureLibLoaded() {
 function sdkNotLoadedResult() {
   return {
     ok: false,
-    error: 'SDK_NOT_LOADED',
+    error: loadErrorCode ?? 'SDK_NOT_LOADED',
     errorDetail: loadError ?? 'tx_windows_fdata.dll not available'
   };
 }
@@ -242,6 +310,8 @@ function readSdkVersion() {
  * @returns {Record<string, unknown>} 含 sdkLoaded / initialized / decoding / connected / sdkVersion 等
  */
 function getTxScannerStatus() {
+  const probe = probeTxScannerDll();
+
   // Step ①：DLL 未加载时返回错误分支
   if (!ensureLibLoaded()) {
     return {
@@ -250,7 +320,9 @@ function getTxScannerStatus() {
       initialized,
       decoding,
       connected,
-      error: loadError ?? 'SDK_NOT_LOADED'
+      error: loadErrorCode ?? 'SDK_NOT_LOADED',
+      errorDetail: loadError ?? 'tx_windows_fdata.dll not available',
+      ...probe
     };
   }
 
@@ -262,7 +334,8 @@ function getTxScannerStatus() {
     decoding,
     connected: connected === null ? null : connected === 1,
     sdkVersion: readSdkVersion(),
-    triggerMode: initialized ? fns.tx_scanner_get_trigger_mode() : null
+    triggerMode: initialized ? fns.tx_scanner_get_trigger_mode() : null,
+    ...probe
   };
 }
 
@@ -402,5 +475,7 @@ module.exports = {
   startTxScanner,
   stopTxScanner,
   deinitTxScanner,
-  resolveTxScannerDllPath
+  resolveTxScannerDllPath,
+  resolveTxScannerLibDir,
+  probeTxScannerDll
 };
