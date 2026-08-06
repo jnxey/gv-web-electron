@@ -1,11 +1,17 @@
 /**
- * TX 扫码 SDK 32 位侧车宿主：64 位 Electron 主进程 spawn node-x86 + sidecar.js。
+ * TX 扫码 SDK 32 位侧车宿主：优先 native-sidecar.exe（与厂商 Demo 同方式），回退 node-x86 + sidecar.js。
  */
 const path = require('node:path');
 const fs = require('node:fs');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const { app } = require('electron');
+const {
+  resolveTxScannerSidecarLogPath,
+  appendTxScannerSidecarLog,
+  readTxScannerSidecarLogTail
+} = require('./tx-scanner-sidecar-log');
+const { getTxScannerUsbHostDiagnose } = require('./tx-scanner-usb-check');
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let sidecarProcess = null;
@@ -51,6 +57,10 @@ function resolveNodeX86Path() {
   return path.join(resolveAppRoot(), 'node-x86', 'node.exe');
 }
 
+function resolveNativeSidecarPath() {
+  return path.join(resolveAppRoot(), 'tx-scanner-native-sidecar', 'native-sidecar.exe');
+}
+
 /**
  * @returns {string}
  */
@@ -73,16 +83,23 @@ function resolveTxScannerLibDirForSidecar() {
 }
 
 /**
- * @returns {{ nodeX86Path: string, sidecarScript: string, nodeExists: boolean, scriptExists: boolean }}
+ * @returns {{ mode: 'native' | 'node', nativeSidecarExe: string, nativeExists: boolean, nodeX86Path: string, sidecarScript: string, nodeExists: boolean, scriptExists: boolean, libDir: string }}
  */
 function probeSidecarRuntime() {
+  const nativeSidecarExe = resolveNativeSidecarPath();
   const nodeX86Path = resolveNodeX86Path();
   const sidecarScript = resolveSidecarScriptPath();
+  const libDir = resolveTxScannerLibDirForSidecar();
+  const nativeExists = fs.existsSync(nativeSidecarExe);
   return {
+    mode: nativeExists ? 'native' : 'node',
+    nativeSidecarExe,
+    nativeExists,
     nodeX86Path,
     sidecarScript,
     nodeExists: fs.existsSync(nodeX86Path),
-    scriptExists: fs.existsSync(sidecarScript)
+    scriptExists: fs.existsSync(sidecarScript),
+    libDir
   };
 }
 
@@ -118,7 +135,18 @@ function handleSidecarMessage(msg) {
   }
 
   if (type === 'result') {
-    const requestId = msg?.requestId;
+    let requestId = typeof msg?.requestId === 'string' ? msg.requestId : null;
+    if (!requestId || !pendingCommands.has(requestId)) {
+      const cmd = typeof msg?.cmd === 'string' ? msg.cmd : '';
+      if (cmd) {
+        for (const [id, pending] of pendingCommands.entries()) {
+          if (pending.cmd === cmd) {
+            requestId = id;
+            break;
+          }
+        }
+      }
+    }
     if (typeof requestId === 'string' && pendingCommands.has(requestId)) {
       const pending = pendingCommands.get(requestId);
       pendingCommands.delete(requestId);
@@ -158,11 +186,19 @@ function handleSidecarMessage(msg) {
  * @returns {Promise<void>}
  */
 function ensureSidecarProcess() {
-  if (sidecarProcess && sidecarReady) return Promise.resolve();
+  if (sidecarProcess && sidecarReady && sidecarProcess.stdin && !sidecarProcess.killed) {
+    return Promise.resolve();
+  }
   if (bootPromise) return bootPromise;
 
   const runtime = probeSidecarRuntime();
-  if (!runtime.nodeExists || !runtime.scriptExists) {
+  if (runtime.mode === 'native') {
+    if (!runtime.nativeExists) {
+      sidecarBootErrorCode = 'SIDECAR_NATIVE_NOT_FOUND';
+      sidecarBootError = runtime.nativeSidecarExe;
+      return Promise.reject(new Error('SIDECAR_NATIVE_NOT_FOUND'));
+    }
+  } else if (!runtime.nodeExists || !runtime.scriptExists) {
     sidecarBootErrorCode = 'SIDECAR_NODE_NOT_FOUND';
     sidecarBootError = runtime.nodeX86Path;
     return Promise.reject(new Error('SIDECAR_NODE_NOT_FOUND'));
@@ -173,15 +209,30 @@ function ensureSidecarProcess() {
     sidecarBootError = null;
     sidecarBootErrorCode = null;
 
-    sidecarProcess = spawn(runtime.nodeX86Path, [runtime.sidecarScript], {
-      cwd: resolveSidecarCwd(),
+    const libDir = resolveTxScannerLibDirForSidecar();
+    const logPath = resolveTxScannerSidecarLogPath(() => libDir);
+    appendTxScannerSidecarLog(logPath, 'host', 'spawn sidecar', { mode: runtime.mode, libDir, logPath });
+    const sidecarCwd =
+      runtime.mode === 'native' ? path.dirname(runtime.nativeSidecarExe) : resolveSidecarCwd();
+    const spawnOptions = {
+      cwd: sidecarCwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
       env: {
         ...process.env,
-        TX_SCANNER_DLL_DIR: resolveTxScannerLibDirForSidecar()
+        TX_SCANNER_DLL_DIR: libDir,
+        TX_SCANNER_LOG_FILE: logPath
       }
-    });
+    };
+
+    /** @type {import('node:child_process').ChildProcess} */
+    let spawnedProcess;
+    if (runtime.mode === 'native') {
+      spawnedProcess = spawn(runtime.nativeSidecarExe, [], spawnOptions);
+    } else {
+      spawnedProcess = spawn(runtime.nodeX86Path, [runtime.sidecarScript], spawnOptions);
+    }
+    sidecarProcess = spawnedProcess;
 
     const bootTimer = setTimeout(() => {
       sidecarBootErrorCode = 'SIDECAR_BOOT_TIMEOUT';
@@ -190,40 +241,69 @@ function ensureSidecarProcess() {
       reject(new Error('SIDECAR_BOOT_TIMEOUT'));
     }, 15000);
 
-    sidecarReader = readline.createInterface({ input: sidecarProcess.stdout });
+    sidecarReader = readline.createInterface({ input: spawnedProcess.stdout });
     sidecarReader.on('line', (line) => {
+      const logPath = resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar());
       try {
         const msg = JSON.parse(String(line));
+        if (shouldLogSidecarStdout(msg)) {
+          appendTxScannerSidecarLog(logPath, 'host', 'stdout', { line: String(line) });
+        }
         handleSidecarMessage(msg);
         if (msg?.type === 'ready') {
           clearTimeout(bootTimer);
           bootPromise = null;
-          if (msg.ok === true) resolve();
-          else reject(new Error(sidecarBootErrorCode ?? 'SDK_NOT_LOADED'));
+          if (msg.ok === true) {
+            sidecarReady = true;
+            resolve();
+          } else {
+            sidecarReady = false;
+            reject(new Error(sidecarBootErrorCode ?? 'SDK_NOT_LOADED'));
+          }
         }
       } catch (err) {
+        appendTxScannerSidecarLog(logPath, 'host', 'stdout parse failed', {
+          line: String(line),
+          error: err instanceof Error ? err.message : String(err)
+        });
         console.error('[tx-scanner-sidecar-host] parse line failed:', line, err);
       }
     });
 
-    sidecarProcess.stderr?.on('data', (chunk) => {
-      console.error('[tx-scanner-sidecar-host] stderr:', String(chunk));
+    spawnedProcess.stderr?.on('data', (chunk) => {
+      const text = String(chunk);
+      const logPath = resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar());
+      appendTxScannerSidecarLog(logPath, 'host', 'stderr', { text });
+      console.error('[tx-scanner-sidecar-host] stderr:', text);
     });
 
-    sidecarProcess.on('error', (err) => {
+    spawnedProcess.on('error', (err) => {
       clearTimeout(bootTimer);
       bootPromise = null;
+      if (sidecarProcess === spawnedProcess) {
+        sidecarProcess = null;
+        sidecarReader = null;
+        sidecarReady = false;
+      }
       sidecarBootErrorCode = 'SIDECAR_SPAWN_FAILED';
       sidecarBootError = err.message;
       reject(err);
     });
 
-    sidecarProcess.on('exit', (code) => {
+    spawnedProcess.on('exit', (code) => {
+      console.log('[tx-scanner-sidecar-host] exited', code);
+      const logPath = resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar());
+      if (code === 3221225477 || code === -1073741819) {
+        appendTxScannerSidecarLog(logPath, 'host', 'sidecar crashed', {
+          exitCode: code,
+          hint: 'ACCESS_VIOLATION during SDK call (often decode_start without FData USB device)'
+        });
+      }
+      if (sidecarProcess !== spawnedProcess) return;
       sidecarReady = false;
       sidecarProcess = null;
       sidecarReader = null;
       bootPromise = null;
-      console.log('[tx-scanner-sidecar-host] exited', code);
     });
   });
 
@@ -235,24 +315,71 @@ function ensureSidecarProcess() {
  * @param {number} [timeoutMs]
  * @returns {Promise<Record<string, unknown>>}
  */
-async function sendSidecarCommand(command, timeoutMs = 20000) {
+async function sendSidecarCommand(command, timeoutMs = 20000, options = {}) {
+  const resetOnFailure = options.resetOnFailure !== false;
   await ensureSidecarProcess();
-  if (!sidecarProcess?.stdin) {
+  if (!sidecarProcess?.stdin || sidecarProcess.killed) {
+    sidecarReady = false;
     throw new Error('SIDECAR_STDIN_UNAVAILABLE');
   }
 
   const requestId = `req_${++commandSeq}`;
   const payload = { ...command, requestId };
+  const logPath = resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar());
+  appendTxScannerSidecarLog(logPath, 'host', 'stdin', payload);
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      pendingCommands.delete(requestId);
-      reject(new Error('SIDECAR_COMMAND_TIMEOUT'));
+      rejectSidecarCommand(requestId, new Error('SIDECAR_COMMAND_TIMEOUT'), resetOnFailure);
     }, timeoutMs);
 
-    pendingCommands.set(requestId, { resolve, reject, timer });
-    sidecarProcess.stdin.write(`${JSON.stringify(payload)}\n`);
+    pendingCommands.set(requestId, { resolve, reject, timer, cmd: String(command.cmd ?? '') });
+    const payloadLine = `${JSON.stringify(payload)}\n`;
+    const canContinue = sidecarProcess.stdin.write(payloadLine);
+    if (!canContinue) {
+      sidecarProcess.stdin.once('drain', () => {});
+    }
   });
+}
+
+/**
+ * @param {string} requestId
+ * @param {Error} err
+ */
+function rejectSidecarCommand(requestId, err, resetOnFailure = true) {
+  const pending = pendingCommands.get(requestId);
+  if (!pending) return;
+  pendingCommands.delete(requestId);
+  clearTimeout(pending.timer);
+  pending.reject(err);
+  if (resetOnFailure) {
+    resetSidecarProcessAfterFailure('command timeout or failure');
+  }
+}
+
+/**
+ * 命令超时或侧车无响应时杀掉进程，避免后续 stop/status 永久阻塞。
+ *
+ * @param {string} reason
+ */
+function resetSidecarProcessAfterFailure(reason) {
+  console.error('[tx-scanner-sidecar-host] reset sidecar:', reason);
+  if (sidecarProcess && !sidecarProcess.killed) {
+    try {
+      sidecarProcess.kill();
+    } catch {
+      /* ignore */
+    }
+  }
+  sidecarProcess = null;
+  sidecarReader = null;
+  bootPromise = null;
+  sidecarReady = false;
+  pendingCommands.forEach((pending) => {
+    clearTimeout(pending.timer);
+    pending.reject(new Error('SIDECAR_RESET'));
+  });
+  pendingCommands.clear();
 }
 
 /**
@@ -264,21 +391,68 @@ function configureSidecarForwarders(forwarders = {}) {
 }
 
 /**
+ * @param {Record<string, unknown>} msg
+ * @returns {boolean}
+ */
+function shouldLogSidecarStdout(msg) {
+  return msg?.type !== 'decode';
+}
+
+/**
  * @returns {Promise<Record<string, unknown>>}
  */
 async function getSidecarTxScannerStatus() {
   const runtime = probeSidecarRuntime();
+  const logPath = resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar());
+  let usbHostDiagnose = null;
+  try {
+    usbHostDiagnose = getTxScannerUsbHostDiagnose();
+  } catch (err) {
+    usbHostDiagnose = {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    };
+  }
   const base = {
     bridgeMode: 'sidecar',
+    sidecarKind: runtime.mode,
     sidecarProcessArch: 'ia32',
     processArch: process.arch,
     dllPath: path.join(resolveTxScannerLibDirForSidecar(), 'tx_windows_fdata.dll'),
     libDir: resolveTxScannerLibDirForSidecar(),
     dllExists: fs.existsSync(path.join(resolveTxScannerLibDirForSidecar(), 'tx_windows_fdata.dll')),
+    nativeSidecarExe: runtime.nativeSidecarExe,
+    nativeExists: runtime.nativeExists,
+    sidecarLogPath: logPath,
+    sidecarLogTail: readTxScannerSidecarLogTail(logPath, 40),
+    usbHostDiagnose,
     ...runtime
   };
 
-  if (!runtime.nodeExists) {
+  if (usbHostDiagnose?.mode === 'hid_keyboard') {
+    return {
+      ok: true,
+      sdkLoaded: false,
+      sdkRequired: false,
+      initialized: false,
+      decoding: false,
+      connected: true,
+      scannerMode: 'hid_keyboard',
+      ...base
+    };
+  }
+
+  if (runtime.mode === 'native' && !runtime.nativeExists) {
+    return {
+      ok: false,
+      sdkLoaded: false,
+      error: 'SIDECAR_NATIVE_NOT_FOUND',
+      errorDetail: runtime.nativeSidecarExe,
+      ...base
+    };
+  }
+
+  if (runtime.mode === 'node' && !runtime.nodeExists) {
     return {
       ok: false,
       sdkLoaded: false,
@@ -298,6 +472,7 @@ async function getSidecarTxScannerStatus() {
       decoding: result.decoding === true,
       connected: result.connected ?? sidecarConnected,
       sdkVersion: result.sdkVersion ?? sidecarSdkVersion,
+      sidecarLogTail: readTxScannerSidecarLogTail(logPath, 60),
       ...base
     };
   } catch (err) {
@@ -316,6 +491,17 @@ async function getSidecarTxScannerStatus() {
  * @returns {Promise<Record<string, unknown>>}
  */
 async function startSidecarTxScanner(options = {}) {
+  const usbHostDiagnose = getTxScannerUsbHostDiagnose();
+  if (usbHostDiagnose?.mode === 'hid_keyboard') {
+    return {
+      ok: false,
+      error: 'SDK_NOT_REQUIRED',
+      errorDetail: 'hid_keyboard',
+      bridgeMode: 'sidecar',
+      scannerMode: 'hid_keyboard'
+    };
+  }
+
   try {
     const result = await sendSidecarCommand(
       {
@@ -326,14 +512,20 @@ async function startSidecarTxScanner(options = {}) {
         waitForDevice: options.waitForDevice,
         deviceWaitTimeoutMs: options.deviceWaitTimeoutMs
       },
-      30000
+      35000
     );
-    return { ...result, bridgeMode: 'sidecar' };
+    appendTxScannerSidecarLog(resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()), 'host', 'start result', result);
+    return { ...result, bridgeMode: 'sidecar', sidecarLogTail: readTxScannerSidecarLogTail(resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()), 60) };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const errorCode =
+      message === 'SIDECAR_COMMAND_TIMEOUT' || message === 'SIDECAR_RESET' || message === 'SIDECAR_STDIN_UNAVAILABLE'
+        ? message
+        : sidecarBootErrorCode ?? 'SIDECAR_ERROR';
     return {
       ok: false,
-      error: sidecarBootErrorCode ?? 'SIDECAR_ERROR',
-      errorDetail: err instanceof Error ? err.message : String(err),
+      error: errorCode,
+      errorDetail: sidecarBootError ?? message,
       bridgeMode: 'sidecar'
     };
   }
@@ -386,5 +578,8 @@ module.exports = {
   getSidecarTxScannerStatus,
   startSidecarTxScanner,
   stopSidecarTxScanner,
-  deinitSidecarTxScanner
+  deinitSidecarTxScanner,
+  resolveTxScannerSidecarLogPath: () => resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()),
+  readTxScannerSidecarLogTail: (maxLines) =>
+    readTxScannerSidecarLogTail(resolveTxScannerSidecarLogPath(() => resolveTxScannerLibDirForSidecar()), maxLines)
 };

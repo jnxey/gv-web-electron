@@ -21,6 +21,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow } = require('electron');
 const sidecarHost = require('./tx-scanner-sidecar-host');
+const { getTxScannerUsbHostDiagnose } = require('./tx-scanner-usb-check');
 
 /** PE Machine：Intel 386+（32 位） */
 const IMAGE_FILE_MACHINE_I386 = 0x014c;
@@ -465,7 +466,14 @@ function getTxScannerStatus() {
     };
   }
 
-  // Step ②：组装完整状态快照
+  // Step ②：组装完整状态快照（含 USB 主机诊断，供 HID/FData 自动分流）
+  let usbHostDiagnose = null;
+  try {
+    usbHostDiagnose = getTxScannerUsbHostDiagnose();
+  } catch (err) {
+    usbHostDiagnose = { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+
   return {
     ok: true,
     sdkLoaded: true,
@@ -475,6 +483,7 @@ function getTxScannerStatus() {
     sdkVersion: readSdkVersion(),
     triggerMode: initialized ? fns.tx_scanner_get_trigger_mode() : null,
     bridgeMode: 'native',
+    usbHostDiagnose,
     ...probe
   };
 }

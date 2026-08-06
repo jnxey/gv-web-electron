@@ -762,16 +762,15 @@ app.on('before-quit', (event) => {
     .flushStore()
     .catch((err) => console.error('Failed to flush cookies on quit:', err))
     .finally(() => {
-      // 应用退出前释放 TX 扫码 SDK 与 koffi 回调槽，避免 native 回调泄漏
-      try {
-        deinitTxScanner();
-      } catch (err) {
-        console.error('[electron] tx-scanner deinit on quit failed:', err);
-      }
-      if (nodeProcess.serial) nodeProcess.serial.kill();
-      if (nodeProcess.socket) nodeProcess.socket.kill();
-      globalShortcut.unregisterAll();
-      app.exit(0);
+      Promise.resolve()
+        .then(() => deinitTxScanner())
+        .catch((err) => console.error('[electron] tx-scanner deinit on quit failed:', err))
+        .finally(() => {
+          if (nodeProcess.serial) nodeProcess.serial.kill();
+          if (nodeProcess.socket) nodeProcess.socket.kill();
+          globalShortcut.unregisterAll();
+          app.exit(0);
+        });
     });
 });
 

@@ -1,0 +1,95 @@
+[2026-08-06T07:28:28.122Z] [host] spawn sidecar {"mode":"native","libDir":"D:\\Work\\gv-web-electron\\resources\\app\\lib","logPath":"D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log"}
+2026-08-06 15:28:28 set_cwd_to_exe_dir cwd=D:\Work\gv-web-electron\resources\app\tx-scanner-native-sidecar
+2026-08-06 15:28:28 ensure_lib_loaded libDir=D:\Work\gv-web-electron\resources\app\lib dllPath=D:\Work\gv-web-electron\resources\app\lib\tx_windows_fdata.dll
+[2026-08-06T07:28:28.141Z] [host] stderr {"text":"[native-sidecar] set_cwd_to_exe_dir cwd=D:\\Work\\gv-web-electron\\resources\\app\\tx-scanner-native-sidecar\r\n[native-sidecar] ensure_lib_loaded libDir=D:\\Work\\gv-web-electron\\resources\\app\\lib dllPath=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx_windows_fdata.dll\r\n"}
+2026-08-06 15:28:28 LoadLibrary ok handle=61710000
+2026-08-06 15:28:28 boot loaded=1 logFile=D:\Work\gv-web-electron\resources\app\lib\tx-scanner-sidecar.log
+2026-08-06 15:28:28 tx_scanner_decode_data_fun_register ret=0
+2026-08-06 15:28:28 tx_scanner_comm_state_fun_register ret=0
+[2026-08-06T07:28:28.145Z] [host] stderr {"text":"[native-sidecar] LoadLibrary ok handle=61710000\r\n[native-sidecar] boot loaded=1 logFile=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log\r\n"}
+[2026-08-06T07:28:28.146Z] [host] stderr {"text":"[native-sidecar] tx_scanner_decode_data_fun_register ret=0\r\n[native-sidecar] tx_scanner_comm_state_fun_register ret=0\r\n"}
+2026-08-06 15:28:28 tx_scanner_init ret=0
+2026-08-06 15:28:28 tx_scanner_init done connected=-1
+[2026-08-06T07:28:28.453Z] [host] stderr {"text":"[native-sidecar] tx_scanner_init ret=0\r\n[native-side"}
+[2026-08-06T07:28:28.453Z] [host] stderr {"text":"car] tx_scanner_init done connected=-1\r\n"}
+[2026-08-06T07:28:28.454Z] [host] stdout {"line":"{\"type\":\"ready\",\"ok\":true,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"dllPath\":\"D:\\\\Work\\\\gv-web-electron\\\\resources\\\\app\\\\lib\\\\tx_windows_fdata.dll\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:28:28.454Z] [host] stdin {"cmd":"status","requestId":"req_1"}
+[2026-08-06T07:28:28.454Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_1\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:28:43.529Z] [host] stdin {"cmd":"status","requestId":"req_2"}
+[2026-08-06T07:28:43.531Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_2\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:28:43.535Z] [host] stdin {"cmd":"start","requestId":"req_3"}
+2026-08-06 15:28:43 handle_start requestId=req_3 line={"cmd":"start","requestId":"req_3"}
+2026-08-06 15:28:43 handle_start: connected=-1, reinit SDK before decode_start
+2026-08-06 15:28:43 reinit deinit ret=0
+2026-08-06 15:28:43 tx_scanner_decode_data_fun_register ret=0
+2026-08-06 15:28:43 tx_scanner_comm_state_fun_register ret=0
+[2026-08-06T07:28:43.539Z] [host] stderr {"text":"[native-sidecar] handle_start requestId=req_3 line={\"cmd\":\"start\",\"requestId\":\"req_3\"}\r\n[native-sidecar] handle_start: connected=-1, reinit SDK before decode_start\r\n[native-sidecar] reinit deinit ret=0\r\n[native-sidecar] tx_scanner_decode_data_fun_register ret=0\r\n[native-sidecar] tx_scanner_comm_state_fun_register ret=0\r\n"}
+2026-08-06 15:28:43 tx_scanner_init ret=0
+2026-08-06 15:28:43 tx_scanner_init done connected=-1
+[2026-08-06T07:28:43.845Z] [host] stderr {"text":"[native-sidecar] tx_scanner_init ret=0\r\n[native-sidecar] tx_scan"}
+[2026-08-06T07:28:43.846Z] [host] stderr {"text":"ner_init done connected=-1\r\n"}
+2026-08-06 15:28:44 decode_start attempt=1/6 connected=-1
+[2026-08-06T07:28:44.347Z] [host] stderr {"text":"[native-sidecar] decode_start attempt=1/6 connected=-1\r\n"}
+[2026-08-06T07:32:20.200Z] [host] spawn sidecar {"mode":"native","libDir":"D:\\Work\\gv-web-electron\\resources\\app\\lib","logPath":"D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log"}
+2026-08-06 15:32:20 set_cwd_to_exe_dir cwd=D:\Work\gv-web-electron\resources\app\tx-scanner-native-sidecar
+2026-08-06 15:32:20 ensure_lib_loaded libDir=D:\Work\gv-web-electron\resources\app\lib dllPath=D:\Work\gv-web-electron\resources\app\lib\tx_windows_fdata.dll
+[2026-08-06T07:32:20.221Z] [host] stderr {"text":"[native-sidecar] set_cwd_to_exe_dir cwd=D:\\Work\\gv-web-electron\\resources\\app\\tx-scanner-native-sidecar\r\n[native-sidecar] ensure_lib_loaded libDir=D:\\Work\\gv-web-electron\\resources\\app\\lib dllPath=D:\\Work\\gv-web-e"}
+[2026-08-06T07:32:20.222Z] [host] stderr {"text":"lectron\\resources\\app\\lib\\tx_windows_fdata.dll\r\n"}
+2026-08-06 15:32:20 LoadLibrary ok handle=7C610000
+2026-08-06 15:32:20 boot loaded=1 logFile=D:\Work\gv-web-electron\resources\app\lib\tx-scanner-sidecar.log
+2026-08-06 15:32:20 tx_scanner_decode_data_fun_register ret=0
+2026-08-06 15:32:20 tx_scanner_comm_state_fun_register ret=0
+[2026-08-06T07:32:20.225Z] [host] stderr {"text":"[native-sidecar] LoadLibrary ok handle=7C610000\r\n[native-sidecar] boot loaded=1 logFile"}
+[2026-08-06T07:32:20.226Z] [host] stderr {"text":"=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log\r\n[native-sidecar] tx_scanner_decode_data_fun_register ret=0\r\n[native-sidecar] tx_scanner_comm_state_fun_register ret=0\r\n"}
+2026-08-06 15:32:20 tx_scanner_init ret=0
+2026-08-06 15:32:20 tx_scanner_init done connected=-1
+[2026-08-06T07:32:20.537Z] [host] stderr {"text":"[native-sidecar] tx_scanner_init ret=0\r\n[native-sidecar] tx_scanner_init done connected=-1\r\n"}
+[2026-08-06T07:32:20.538Z] [host] stdout {"line":"{\"type\":\"ready\",\"ok\":true,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"dllPath\":\"D:\\\\Work\\\\gv-web-electron\\\\resources\\\\app\\\\lib\\\\tx_windows_fdata.dll\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:32:20.538Z] [host] stdin {"cmd":"status","requestId":"req_4"}
+[2026-08-06T07:32:20.539Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_4\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:32:33.814Z] [host] stdin {"cmd":"status","requestId":"req_5"}
+[2026-08-06T07:32:33.815Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_5\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:37:11.031Z] [host] stdin {"cmd":"status","requestId":"req_6"}
+[2026-08-06T07:37:11.039Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_6\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:37:25.972Z] [host] stdin {"cmd":"status","requestId":"req_7"}
+[2026-08-06T07:37:25.976Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_7\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:38:18.528Z] [host] stdin {"cmd":"status","requestId":"req_8"}
+[2026-08-06T07:38:18.531Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_8\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:38:32.289Z] [host] stdin {"cmd":"status","requestId":"req_9"}
+[2026-08-06T07:38:32.297Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_9\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:38:45.105Z] [host] stdin {"cmd":"status","requestId":"req_10"}
+[2026-08-06T07:38:45.116Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_10\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:38:58.445Z] [host] stdin {"cmd":"status","requestId":"req_11"}
+[2026-08-06T07:38:58.446Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_11\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:39:21.979Z] [host] spawn sidecar {"mode":"native","libDir":"D:\\Work\\gv-web-electron\\resources\\app\\lib","logPath":"D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log"}
+2026-08-06 15:39:22 set_cwd_to_exe_dir cwd=D:\Work\gv-web-electron\resources\app\tx-scanner-native-sidecar
+2026-08-06 15:39:22 ensure_lib_loaded libDir=D:\Work\gv-web-electron\resources\app\lib dllPath=D:\Work\gv-web-electron\resources\app\lib\tx_windows_fdata.dll
+[2026-08-06T07:39:22.002Z] [host] stderr {"text":"[native-sidecar] set_cwd_to_exe_dir cwd=D:\\Work\\gv-web-electron\\resources\\app\\tx-scanner-native-sidecar\r\n[native-sidecar] ensure_lib_loaded libDir=D:\\Work\\gv-web-electron\\resources\\app\\lib dllPath=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx_windows_fdata.dll\r\n"}
+2026-08-06 15:39:22 LoadLibrary ok handle=7C610000
+2026-08-06 15:39:22 boot loaded=1 logFile=D:\Work\gv-web-electron\resources\app\lib\tx-scanner-sidecar.log
+2026-08-06 15:39:22 tx_scanner_decode_data_fun_register ret=0
+2026-08-06 15:39:22 tx_scanner_comm_state_fun_register ret=0
+[2026-08-06T07:39:22.009Z] [host] stderr {"text":"[native-sidecar] LoadLibrary ok handle=7C610000\r\n[native-sidecar] boot loaded=1 logFile=D:\\Work\\gv-web-electron\\resources\\app\\lib\\tx-scanner-sidecar.log\r\n[native-sidecar] tx_scanner_decode_data_fun_register ret=0\r\n[native-sidecar] tx_scanner_comm_state_fun_register ret=0\r\n"}
+2026-08-06 15:39:22 tx_scanner_init ret=0
+2026-08-06 15:39:22 tx_scanner_init done connected=-1
+[2026-08-06T07:39:22.318Z] [host] stderr {"text":"[native-sidecar] tx_scanner_init ret=0\r\n[native-sidecar] tx_sc"}
+[2026-08-06T07:39:22.319Z] [host] stderr {"text":"anner_init done connected=-1\r\n"}
+[2026-08-06T07:39:22.319Z] [host] stdout {"line":"{\"type\":\"ready\",\"ok\":true,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"dllPath\":\"D:\\\\Work\\\\gv-web-electron\\\\resources\\\\app\\\\lib\\\\tx_windows_fdata.dll\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:39:22.319Z] [host] stdin {"cmd":"status","requestId":"req_1"}
+[2026-08-06T07:39:22.320Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_1\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:39:38.742Z] [host] stdin {"cmd":"status","requestId":"req_2"}
+[2026-08-06T07:39:38.745Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_2\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:40:01.196Z] [host] stdin {"cmd":"status","requestId":"req_3"}
+[2026-08-06T07:40:01.202Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_3\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:45:18.087Z] [host] stdin {"cmd":"status","requestId":"req_4"}
+[2026-08-06T07:45:18.092Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_4\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:45:30.395Z] [host] stdin {"cmd":"status","requestId":"req_5"}
+[2026-08-06T07:45:30.404Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_5\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:45:42.662Z] [host] stdin {"cmd":"status","requestId":"req_6"}
+[2026-08-06T07:45:42.666Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_6\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:46:17.749Z] [host] stdin {"cmd":"status","requestId":"req_7"}
+[2026-08-06T07:46:17.750Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_7\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:48:19.137Z] [host] stdin {"cmd":"status","requestId":"req_8"}
+[2026-08-06T07:48:19.142Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_8\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
+[2026-08-06T07:48:32.125Z] [host] stdin {"cmd":"status","requestId":"req_9"}
+[2026-08-06T07:48:32.133Z] [host] stdout {"line":"{\"type\":\"result\",\"cmd\":\"status\",\"requestId\":\"req_9\",\"ok\":true,\"sdkLoaded\":true,\"initialized\":true,\"decoding\":false,\"connected\":null,\"sdkVersion\":\"1.0.0[0]\",\"processArch\":\"ia32\",\"sidecarKind\":\"native\"}"}
