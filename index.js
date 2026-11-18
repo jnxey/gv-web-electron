@@ -22,6 +22,7 @@ const {
 } = require('./tx-scanner-bridge');
 const { getTxScannerUsbHostDiagnoseAsync } = require('./tx-scanner-usb-check');
 const { SerialPort } = require('serialport');
+const { printHtmlAsEscposRaw } = require('./escpos-raw-print');
 
 const execFileAsync = promisify(execFile);
 
@@ -516,16 +517,33 @@ function initIPC(mainWindow) {
     return applyDesktopShortcutName(name);
   });
 
-  // 打印html：隐藏窗口加载 HTML 后 silent 静默直打（与前端 table-print-dialog 的 config 配套）
+  // 打印 html。Windows 小票走 ESC/POS RAW，失败不回退 webContents.print（EMF 会被部分小票机打成测试页）。
+  // 其他平台仍用隐藏窗口 silent 直打。
   ipcMain.handle('print-html', async (event, options) => {
+    const htmlDocument = buildPrintHtmlDocument(options.content);
+    const printOptions = buildPrintOptionsFromConfig(options.config ?? {});
+
+    if (process.platform === 'win32') {
+      try {
+        const printResult = await printHtmlAsEscposRaw({
+          htmlDocument,
+          deviceName: printOptions.deviceName,
+          copies: printOptions.copies
+        });
+        if (printResult.success !== true) console.error('打印失败:', printResult.failureReason);
+        return printResult;
+      } catch (err) {
+        console.error('打印 HTML 失败:', err);
+        return { success: false, failureReason: err instanceof Error ? err.message : String(err) };
+      }
+    }
+
     const htmlTempPath = path.join(os.tmpdir(), PRINT_TEMP_HTML_FILE_PREFIX + Date.now() + '.html');
     const printWindow = createHiddenPrintWindow();
 
     try {
-      const htmlDocument = buildPrintHtmlDocument(options.content);
       fs.writeFileSync(htmlTempPath, htmlDocument, 'utf8');
       await printWindow.loadFile(htmlTempPath);
-      const printOptions = buildPrintOptionsFromConfig(options.config ?? {});
       const printResult = await new Promise((resolve) => {
         printWindow.webContents.print(printOptions, (success, failureReason) => {
           if (!success) console.error('打印失败:', failureReason);
