@@ -7,6 +7,7 @@
   "scripts": {
     "start": "electron ./index.js",
     "build": "electron-builder --win --x64",
+    "build:win7": "powershell -ExecutionPolicy Bypass -File ./scripts/build-win7.ps1",
     "setup:tx-scanner-sidecar": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-tx-scanner-sidecar.ps1",
     "build:tx-scanner-native-sidecar": "powershell -ExecutionPolicy Bypass -File ./scripts/build-native-sidecar.ps1",
     "diagnose:tx-scanner": "powershell -ExecutionPolicy Bypass -File ./scripts/tx-scanner-diagnose.ps1",

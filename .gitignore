@@ -11,6 +11,8 @@ stats.html
 /assets/resource-space/space-*
 
 out/
+.win7-stage/
+dist-win7/
 
 resources/app/vendor
 resources/app/apk

@@ -70,13 +70,50 @@ function ensureShortcutIconDir() {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-/** @param {string} url */
+/**
+ * Electron 22 没有 net.fetch，用 net.request 下载快捷方式图标。
+ * @param {string} url
+ * @returns {Promise<Buffer>}
+ */
+function downloadIcoBufferWithNetRequest(url) {
+  return new Promise((resolve, reject) => {
+    const request = net.request(url);
+    const chunks = [];
+
+    request.on('response', (response) => {
+      const statusCode = response.statusCode;
+      if (statusCode < 200 || statusCode >= 300) {
+        response.resume();
+        reject(new Error(`下载图标失败: ${statusCode}`));
+        return;
+      }
+      response.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+    request.end();
+  });
+}
+
+/**
+ * 下载快捷方式 .ico。Electron 25 及以上用 net.fetch，更早版本回退 net.request。
+ * @param {string} url
+ * @returns {Promise<Buffer>}
+ */
 async function downloadIcoBuffer(url) {
-  const response = await net.fetch(url);
-  if (!response.ok) {
-    throw new Error(`下载图标失败: ${response.status} ${response.statusText}`);
+  if (net.fetch) {
+    const response = await net.fetch(url);
+    if (!response.ok) {
+      throw new Error(`下载图标失败: ${response.status} ${response.statusText}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
   }
-  return Buffer.from(await response.arrayBuffer());
+  return downloadIcoBufferWithNetRequest(url);
 }
 
 /** @param {Buffer} buffer */
